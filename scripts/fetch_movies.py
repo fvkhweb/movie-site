@@ -4,7 +4,7 @@ TMDB_API_KEY = os.environ["TMDB_API_KEY"]
 POISKKINO_API_KEY = os.environ["POISKKINO_API_KEY"]
 
 TMDB_BASE = "https://api.themoviedb.org/3"
-IMG_MIRROR = "https://imagetmdb.com/t/p/w500" 
+IMG_MIRROR = "https://imagetmdb.com/t/p/w500" # Зеркало TMDB как fallback
 LANG = "ru-RU"
 
 KP_BASE = "https://api.kinopoisk.dev/v1.4/movie"
@@ -22,7 +22,7 @@ def get_kp_data(title, year):
         if year and str(year).isdigit():
             params["year"] = year
             
-        time.sleep(0.3) # Защита от лимитов API
+        time.sleep(0.3)
         r = requests.get(f"{KP_BASE}/search", headers=KP_HEADERS, params=params, timeout=15)
         
         if r.status_code == 200:
@@ -30,8 +30,11 @@ def get_kp_data(title, year):
             if docs:
                 movie = docs[0]
                 kp_id = movie["id"]
-                poster = movie.get("poster", {}).get("url")
                 
+                # Формируем прямую ссылку на постер Кинопоиска
+                direct_poster_url = f"https://st.kp.yandex.net/images/film_iphone/iphone360_{kp_id}.jpg"
+                
+                # Получаем детали (актёры, описание)
                 time.sleep(0.3)
                 d_resp = requests.get(f"{KP_BASE}/{kp_id}", headers=KP_HEADERS, timeout=15)
                 
@@ -40,14 +43,11 @@ def get_kp_data(title, year):
                     actors = [p.get("name") for p in details.get("persons", []) if "актер" in p.get("profession", "").lower() or p.get("enProfession") == "actor"]
                     
                     return {
-                        "poster": poster,
+                        "poster": direct_poster_url, # Используем прямую ссылку
                         "description": details.get("description") or movie.get("description"),
                         "actors": ", ".join(actors[:10]) + ("..." if len(actors) > 10 else ""),
                         "kp_rating": details.get("rating", {}).get("kp")
                     }
-        elif r.status_code == 429:
-             print(f"Лимит запросов! Ждем...")
-             time.sleep(2)
     except Exception as e:
         print(f"Ошибка КП для '{title}': {e}")
     return None
@@ -66,6 +66,7 @@ def process_movies(results):
             "title": title,
             "rating": m.get("vote_average", 0),
             "year": year,
+            # Запасной постер с TMDB (через зеркало)
             "poster": IMG_MIRROR + m["poster_path"],
             "description": m.get("overview", ""),
             "actors": ""
@@ -73,14 +74,23 @@ def process_movies(results):
         
         print(f"Ищем: {title} ({year})")
         kp_info = get_kp_data(title, year)
+        
+        # Если Кинопоиск нашёл фильм и дал данные — обогащаем
         if kp_info:
-            if kp_info.get("poster"): movie_data["poster"] = kp_info["poster"]
-            if kp_info.get("description"): movie_data["description"] = kp_info["description"]
-            if kp_info.get("actors"): movie_data["actors"] = kp_info["actors"]
-            if kp_info.get("kp_rating"): movie_data["rating"] = kp_info["kp_rating"]
+            # Перезаписываем постер на прямой с Кинопоиска (самый надёжный вариант)
+            if kp_info.get("poster"): 
+                movie_data["poster"] = kp_info["poster"]
+            if kp_info.get("description"): 
+                movie_data["description"] = kp_info["description"]
+            if kp_info.get("actors"): 
+                movie_data["actors"] = kp_info["actors"]
+            if kp_info.get("kp_rating"): 
+                movie_data["rating"] = kp_info["kp_rating"]
                 
         movies.append(movie_data)
     return movies
+
+# ... (остальной код функции save и сбора popular/top_rated остаётся без изменений) ...
 
 def save(name, data):
     os.makedirs("data", exist_ok=True)
