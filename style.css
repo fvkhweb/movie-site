@@ -1,0 +1,13 @@
+body { font-family: sans-serif; background: #121212; color: #eee; margin: 20px; }
+h1 { margin-top: 0; }
+.controls { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.controls select, .controls input {
+  padding: 8px 12px; border-radius: 8px; border: 1px solid #333;
+  background: #1e1e1e; color: #eee; font-size: 14px;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+.card { background: #1e1e1e; border-radius: 10px; overflow: hidden; }
+.card img { width: 100%; display: block; aspect-ratio: 2/3; object-fit: cover; }
+.info { padding: 10px; font-size: 13px; }
+.info b { display: block; margin-bottom: 4px; }
+.info span { color: #f5c518; }
