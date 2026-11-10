@@ -60,15 +60,11 @@ function render() {
 // Модалка
 function openModal(id) {
   // Ищем фильм в текущем списке
-  const movie = movies.find(m => m.id === id);
-  if (!movie) return;
-
-  const modal = document.getElementById("movieModal");
-  const modalBody = document.getElementById("modalBody");
+    const safePoster = movie.poster ? movie.poster.replace("image.tmdb.org", "imagetmdb.com") : "";
 
   modalBody.innerHTML = `
     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-      <img src="${movie.poster}" style="width: 200px; border-radius: 8px; object-fit: cover;" onerror="this.style.display='none'">
+      <img src="${safePoster}" style="width: 200px; border-radius: 8px; object-fit: cover;" onerror="this.style.display='none'">
       <div style="flex: 1; min-width: 250px;">
         <h2 style="margin-top: 0;">${movie.title} (${movie.year})</h2>
         <p><strong>Рейтинг:</strong> ⭐ ${movie.rating ? movie.rating.toFixed(1) : 'Нет'}</p>
