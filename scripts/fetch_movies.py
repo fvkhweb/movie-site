@@ -4,7 +4,8 @@ TMDB_API_KEY = os.environ["TMDB_API_KEY"]
 POISKKINO_API_KEY = os.environ["POISKKINO_API_KEY"]
 
 TMDB_BASE = "https://api.themoviedb.org/3"
-IMG = "https://image.tmdb.org/t/p/w500"
+# ИСПОЛЬЗУЕМ ЗЕРКАЛО ВМЕСТО ЗАБЛОКИРОВАННОГО image.tmdb.org
+IMG_MIRROR = "https://imagetmdb.com/t/p/w500" 
 LANG = "ru-RU"
 
 KP_BASE = "https://api.kinopoisk.dev/v1.4/movie"
@@ -60,7 +61,7 @@ def process_movies(results):
             "title": title,
             "rating": m.get("vote_average", 0),
             "year": year,
-            "poster": IMG + m["poster_path"],
+            "poster": IMG_MIRROR + m["poster_path"], # Здесь теперь зеркало
             "description": m.get("overview", ""),
             "actors": ""
         }
@@ -68,10 +69,14 @@ def process_movies(results):
         print(f"Ищем: {title} ({year})")
         kp_info = get_kp_data(title, year)
         if kp_info:
-            if kp_info.get("poster"): movie_data["poster"] = kp_info["poster"]
-            if kp_info.get("description"): movie_data["description"] = kp_info["description"]
-            if kp_info.get("actors"): movie_data["actors"] = kp_info["actors"]
-            if kp_info.get("kp_rating"): movie_data["rating"] = kp_info["kp_rating"]
+            if kp_info.get("poster"): 
+                movie_data["poster"] = kp_info["poster"]
+            if kp_info.get("description"): 
+                movie_data["description"] = kp_info["description"]
+            if kp_info.get("actors"): 
+                movie_data["actors"] = kp_info["actors"]
+            if kp_info.get("kp_rating"): 
+                movie_data["rating"] = kp_info["kp_rating"]
                 
         movies.append(movie_data)
     return movies
@@ -81,14 +86,12 @@ def save(name, data):
     with open(f"data/{name}.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
 
-# Собираем Популярное
 print("=== СБОР ПОПУЛЯРНОГО ===")
 popular = []
 for page in range(1, 4):
     popular += process_movies(fetch_tmdb("/movie/popular", {"page": page})["results"])
 save("popular", popular)
 
-# Собираем Топ по рейтингу
 print("=== СБОР ТОПА ===")
 top = []
 for page in range(1, 4):
