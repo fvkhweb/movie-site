@@ -43,17 +43,20 @@ function render() {
     list.sort((a, b) => a.title.localeCompare(b.title));
   }
   
-  // 3. Рендер с заглушкой для битых постеров
-  document.getElementById("grid").innerHTML = list.map(m => `
+    // 3. Рендер с заглушкой для битых постеров
+  document.getElementById("grid").innerHTML = list.map(m => {
+    // Замена заблокированного домена на зеркало прямо на лету
+    let safePoster = m.poster ? m.poster.replace("image.tmdb.org", "imagetmdb.com") : "";
+    
+    return `
     <div class="card" onclick="openModal(${m.id})">
-      <img src="${m.poster}" alt="${m.title}" loading="lazy" 
+      <img src="${safePoster}" alt="${m.title}" loading="lazy" 
            onerror="this.style.display='none'; this.parentElement.classList.add('no-image'); this.parentElement.insertAdjacentHTML('afterbegin', '<div class=\\'no-poster\\'>Нет постера</div>');">
       <div class="info">
         <b>${m.title}</b> <span>⭐ ${m.rating ? m.rating.toFixed(1) : '—'} (${m.year})</span>
       </div>
-    </div>`).join("");
-}
-
+    </div>`;
+  }).join("");
 // Модалка
 function openModal(id) {
   // Ищем фильм в текущем списке
