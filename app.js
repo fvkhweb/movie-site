@@ -23,7 +23,7 @@ function render() {
   );
   document.getElementById("grid").innerHTML = list.slice(0, 60).map(m => `
     <div class="card">
-      <img src="https://wsrv.nl/?url=${encodeURIComponent(m.poster)}" alt="" loading="lazy">
+      <img src="https://imagetmdb.com/t/p/w500${m.poster.replace('https://image.tmdb.org/t/p/w500', '')}" alt="" loading="lazy">
       <div class="info">
         <b>${m.title}</b> <span>⭐ ${m.rating.toFixed(1)} (${m.year})</span>
         <p>${m.overview.slice(0, 120)}…</p>
