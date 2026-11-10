@@ -4,7 +4,6 @@ TMDB_API_KEY = os.environ["TMDB_API_KEY"]
 POISKKINO_API_KEY = os.environ["POISKKINO_API_KEY"]
 
 TMDB_BASE = "https://api.themoviedb.org/3"
-# ИСПОЛЬЗУЕМ ЗЕРКАЛО ВМЕСТО ЗАБЛОКИРОВАННОГО image.tmdb.org
 IMG_MIRROR = "https://imagetmdb.com/t/p/w500" 
 LANG = "ru-RU"
 
@@ -23,7 +22,9 @@ def get_kp_data(title, year):
         if year and str(year).isdigit():
             params["year"] = year
             
+        time.sleep(0.3) # Защита от лимитов API
         r = requests.get(f"{KP_BASE}/search", headers=KP_HEADERS, params=params, timeout=15)
+        
         if r.status_code == 200:
             docs = r.json().get("docs", [])
             if docs:
@@ -31,8 +32,9 @@ def get_kp_data(title, year):
                 kp_id = movie["id"]
                 poster = movie.get("poster", {}).get("url")
                 
-                time.sleep(0.2)
+                time.sleep(0.3)
                 d_resp = requests.get(f"{KP_BASE}/{kp_id}", headers=KP_HEADERS, timeout=15)
+                
                 if d_resp.status_code == 200:
                     details = d_resp.json()
                     actors = [p.get("name") for p in details.get("persons", []) if "актер" in p.get("profession", "").lower() or p.get("enProfession") == "actor"]
@@ -43,6 +45,9 @@ def get_kp_data(title, year):
                         "actors": ", ".join(actors[:10]) + ("..." if len(actors) > 10 else ""),
                         "kp_rating": details.get("rating", {}).get("kp")
                     }
+        elif r.status_code == 429:
+             print(f"Лимит запросов! Ждем...")
+             time.sleep(2)
     except Exception as e:
         print(f"Ошибка КП для '{title}': {e}")
     return None
@@ -61,7 +66,7 @@ def process_movies(results):
             "title": title,
             "rating": m.get("vote_average", 0),
             "year": year,
-            "poster": IMG_MIRROR + m["poster_path"], # Здесь теперь зеркало
+            "poster": IMG_MIRROR + m["poster_path"],
             "description": m.get("overview", ""),
             "actors": ""
         }
@@ -69,14 +74,10 @@ def process_movies(results):
         print(f"Ищем: {title} ({year})")
         kp_info = get_kp_data(title, year)
         if kp_info:
-            if kp_info.get("poster"): 
-                movie_data["poster"] = kp_info["poster"]
-            if kp_info.get("description"): 
-                movie_data["description"] = kp_info["description"]
-            if kp_info.get("actors"): 
-                movie_data["actors"] = kp_info["actors"]
-            if kp_info.get("kp_rating"): 
-                movie_data["rating"] = kp_info["kp_rating"]
+            if kp_info.get("poster"): movie_data["poster"] = kp_info["poster"]
+            if kp_info.get("description"): movie_data["description"] = kp_info["description"]
+            if kp_info.get("actors"): movie_data["actors"] = kp_info["actors"]
+            if kp_info.get("kp_rating"): movie_data["rating"] = kp_info["kp_rating"]
                 
         movies.append(movie_data)
     return movies
@@ -88,7 +89,7 @@ def save(name, data):
 
 print("=== СБОР ПОПУЛЯРНОГО ===")
 popular = []
-for page in range(1, 4):
+for page in range(1, 4): # 3 страницы (60 фильмов)
     popular += process_movies(fetch_tmdb("/movie/popular", {"page": page})["results"])
 save("popular", popular)
 
