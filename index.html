@@ -8,9 +8,26 @@
 </head>
 <body>
   <h1>🎬 Что посмотреть?</h1>
-  <div class="controls">
-    <input id="search" type="text" placeholder="Поиск по названию...">
+  
+  <div class="top-controls">
+    <!-- Вкладки -->
+    <div class="tabs">
+      <button id="tab-popular" class="active" onclick="switchTab('popular')">Популярное</button>
+      <button id="tab-top" onclick="switchTab('top_rated')">Топ по рейтингу</button>
+    </div>
+    
+    <!-- Сортировка и поиск -->
+    <div class="filters">
+      <input id="search" type="text" placeholder="Поиск по названию...">
+      <select id="sortSelect">
+        <option value="default">По умолчанию</option>
+        <option value="rating_desc">Рейтинг (высокий → низкий)</option>
+        <option value="year_desc">Год (новые → старые)</option>
+        <option value="title_asc">Название (А → Я)</option>
+      </select>
+    </div>
   </div>
+
   <div id="grid" class="grid"></div>
 
   <!-- Модальное окно -->
