@@ -24,6 +24,14 @@ KP_HEADERS = {"X-API-KEY": POISKKINO_API_KEY}
 # У бесплатного тарифа Кинопоиска ~200 запросов/сутки (по 2 на фильм)
 KP_MAX_MOVIES = int(os.environ.get("KP_MAX_MOVIES", "90"))
 
+# Второй источник — Kinopoisk Unofficial (kinopoiskapiunofficial.tech),
+# ~500 запросов/сутки бесплатно. Дополняет тот, у кого лимит не выбрался,
+# и даёт интересные факты.
+KPU_API_KEY = os.environ.get("KP_UNOFFICIAL_API_KEY", "")
+KPU_BASE = "https://kinopoiskapiunofficial.tech/api/v2.2"
+KPU_HEADERS = {"X-API-KEY": KPU_API_KEY}
+UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", "120"))
+
 POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "10"))
 TOP_PAGES = int(os.environ.get("TOP_PAGES", "10"))
 GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "2"))
@@ -134,9 +142,87 @@ def enrich_movie(m):
         "genres": [g["id"] for g in details.get("genres", [])],
         "countries": [c.get("name", "") for c in details.get("production_countries", [])],
         "poster_path": details.get("poster_path") or "",
+        "backdrop": details.get("backdrop_path") or "",
         "description": details.get("overview") or "",
         "cast": cast,
+        "similar": get_recommendations(m["id"]),
+        "trailer": get_trailer(m["id"]),
     }
+
+
+def get_kp_unofficial(title, year):
+    """Резервный источник данных о фильме: Kinopoisk Unofficial API."""
+    if not KPU_API_KEY:
+        return None
+    try:
+        params = {"keyword": title}
+        if year and str(year).isdigit():
+            params["yearFrom"] = year
+            params["yearTo"] = year
+
+        r = session.get(f"{KPU_BASE}/films", headers=KPU_HEADERS, params=params, timeout=15)
+        if r.status_code != 200:
+            print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code}")
+            return None
+
+        films = r.json().get("films", [])
+        if not films:
+            return None
+
+        f = films[0]
+        film_id = f.get("filmId") or f.get("kinopoiskId")
+        poster = f.get("posterUrl") or f.get("posterUrlPreview") or ""
+        description = f.get("description")
+        rating = f.get("ratingKinopoisk") or f.get("rating")
+
+        time.sleep(0.2)
+        d = session.get(f"{KPU_BASE}/films/{film_id}", headers=KPU_HEADERS, timeout=15)
+        if d.status_code == 200:
+            det = d.json()
+            description = det.get("description") or description
+            poster = det.get("posterUrl") or poster
+            rating = det.get("ratingKinopoisk") or rating
+        else:
+            print(f"  КП-Unofficial детали {film_id}: HTTP {d.status_code}")
+
+        facts = []
+        time.sleep(0.2)
+        fr = session.get(f"{KPU_BASE}/films/{film_id}/facts", headers=KPU_HEADERS, timeout=15)
+        if fr.status_code == 200:
+            facts = [i.get("text") for i in fr.json().get("items", []) if i.get("text")][:3]
+        elif fr.status_code not in (404,):
+            print(f"  КП-Unofficial факты {film_id}: HTTP {fr.status_code}")
+
+        return {
+            "poster": poster,
+            "description": description,
+            "kp_rating": rating,
+            "facts": facts,
+        }
+    except Exception as e:
+        print(f"  КП-Unofficial ошибка для '{title}': {e}")
+    return None
+
+
+def get_recommendations(movie_id):
+    """Похожие фильмы из TMDB (id, только те, у кого есть постер)."""
+    data = tmdb_get(f"/movie/{movie_id}/recommendations") or {}
+    return [r["id"] for r in data.get("results", [])[:8] if r.get("poster_path")][:6]
+
+
+def get_trailer(movie_id):
+    """Ключ YouTube-трейлера из TMDB (сначала русский, потом английский)."""
+    for lang in ("ru-RU", "en-US"):
+        data = tmdb_get(f"/movie/{movie_id}/videos", {"language": lang}) or {}
+        vids = [v for v in data.get("results", []) if v.get("site") == "YouTube" and v.get("key")]
+        if vids:
+            best = (
+                [v for v in vids if v.get("official") and v.get("type") == "Trailer"]
+                or [v for v in vids if v.get("type") == "Trailer"]
+                or vids
+            )
+            return best[0]["key"]
+    return ""
 
 
 def get_kp_data(title, year):
@@ -219,7 +305,8 @@ def build_catalog():
             if done % 100 == 0:
                 print(f"детали: {done}/{len(candidates)}")
 
-    # Кинопоиск — для первых KP_MAX_MOVIES фильмов (по убыванию популярности)
+    # Кинопоиск — обогащение двух источников по убыванию популярности:
+    # сначала kinopoisk.dev, затем Kinopoisk Unofficial (факты + резерв).
     movies_raw.sort(key=lambda m: m["popularity"], reverse=True)
     for m in movies_raw[:KP_MAX_MOVIES]:
         kp = get_kp_data(m["title"], m["year"])
@@ -230,6 +317,19 @@ def build_catalog():
                 m["kp_rating"] = round(kp["kp_rating"], 1)
             if kp.get("poster"):
                 m["poster_fallback"] = kp["poster"]
+        time.sleep(0.3)
+
+    for m in movies_raw[KP_MAX_MOVIES:KP_MAX_MOVIES + UNOFFICIAL_MAX_MOVIES]:
+        kp = get_kp_unofficial(m["title"], m["year"])
+        if kp:
+            if kp.get("description"):
+                m["description"] = kp["description"]
+            if kp.get("kp_rating"):
+                m["kp_rating"] = round(kp["kp_rating"], 1)
+            if kp.get("poster"):
+                m["poster_fallback"] = kp["poster"]
+            if kp.get("facts"):
+                m["facts"] = kp["facts"]
         time.sleep(0.3)
 
     # Постеры (параллельно)
@@ -266,6 +366,14 @@ def build_catalog():
             m.pop("kp_rating", None)
         if not m.get("poster_fallback"):
             m.pop("poster_fallback", None)
+        if not m.get("similar"):
+            m.pop("similar", None)
+        if not m.get("trailer"):
+            m.pop("trailer", None)
+        if not m.get("facts"):
+            m.pop("facts", None)
+        if not m.get("backdrop"):
+            m.pop("backdrop", None)
 
     save("movies", movies)
     save("genres", genres)

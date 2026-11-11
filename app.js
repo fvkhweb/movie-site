@@ -323,11 +323,31 @@ function openModal(id) {
         .join("")}</div></div>`
     : "";
 
+  const facts = (m.facts || []).slice(0, 3);
+  const factsHtml = facts.length
+    ? `<div class="facts-section"><h3>💡 Интересные факты</h3><ul>${facts
+        .map((f) => `<li>${escapeHtml(f)}</li>`)
+        .join("")}</ul></div>`
+    : "";
+
+  const similar = (m.similar || []).map(movieById).filter(Boolean).slice(0, 6);
+  const similarHtml = similar.length
+    ? `<div class="similar-section"><h3>🎯 Похожее</h3><div class="similar-row">${similar
+        .map(
+          (s) => `
+      <div class="similar-card" data-id="${s.id}">
+        <img alt="${escapeAttr(s.title || "")}" loading="lazy" src="${escapeAttr(s.poster || `posters/${s.id}.jpg`)}">
+        <span>${escapeHtml(s.title || "")}</span>
+      </div>`
+        )
+        .join("")}</div></div>`
+    : "";
+
   el("modalBody").innerHTML = `
-    <div class="movie-hero">
+    <div class="modal-banner ${m.backdrop ? "" : "no-image"}" ${m.backdrop ? `style="background-image:url('${escapeAttr(personPhoto(m.backdrop, 780))}')"` : ""}>
       ${
         local || fallback
-          ? `<img alt="${escapeAttr(m.title || "")}" src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>`
+          ? `<img class="hero-poster" alt="${escapeAttr(m.title || "")}" src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>`
           : `<div class="poster-empty" style="width:200px;">Нет постера</div>`
       }
       <div class="movie-info">
@@ -335,11 +355,18 @@ function openModal(id) {
         <p class="movie-sub">${escapeHtml([m.original_title, (m.countries || []).join(", ")].filter(Boolean).join(" • "))}</p>
         <div class="ratings">${ratings}</div>
         <div class="chips">${genreChips}</div>
-        <p class="overview">${escapeHtml(m.description || "Описание отсутствует.")}</p>
-        <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" style="position:static; margin-top:12px;" title="В избранное">${isFav ? "❤" : "🤍"}</button>
+        <div class="movie-actions">
+          <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" style="position:static; margin-top:0;" title="В избранное">${isFav ? "❤" : "🤍"}</button>
+          ${m.trailer ? `<button class="btn-accent trailer-btn" data-trailer="${escapeAttr(m.trailer)}">▶ Трейлер</button>` : ""}
+        </div>
       </div>
     </div>
-    ${castHtml}`;
+    <div class="movie-body">
+      <p class="overview">${escapeHtml(m.description || "Описание отсутствует.")}</p>
+    </div>
+    ${factsHtml}
+    ${castHtml}
+    ${similarHtml}`;
 
   el("movieModal").hidden = false;
   document.body.style.overflow = "hidden";
@@ -438,6 +465,20 @@ function bindEvents() {
       toggleFavorite(Number(fav.dataset.id), fav);
       return;
     }
+    const trailer = e.target.closest(".trailer-btn");
+    if (trailer) {
+      const poster = el("modalBody").querySelector(".hero-poster");
+      if (poster) {
+        const wrap = document.createElement("div");
+        wrap.className = "trailer-wrap";
+        wrap.innerHTML =
+          `<iframe src="https://www.youtube.com/embed/${escapeAttr(trailer.dataset.trailer)}?autoplay=1" ` +
+          `allow="autoplay; encrypted-media" allowfullscreen title="Трейлер"></iframe>`;
+        poster.replaceWith(wrap);
+        trailer.remove();
+      }
+      return;
+    }
     const actor = e.target.closest(".cast-card");
     if (actor) {
       state.actor = actor.dataset.actor;
@@ -446,6 +487,12 @@ function bindEvents() {
       switchToAll();
       closeModal();
       window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const similarCard = e.target.closest(".similar-card");
+    if (similarCard) {
+      openModal(Number(similarCard.dataset.id));
+      el("modalBody").scrollTop = 0;
     }
   });
 

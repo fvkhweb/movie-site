@@ -329,15 +329,44 @@ a:hover { text-decoration: underline; }
 }
 .modal-close:hover { color: var(--text); }
 
-.movie-hero { display: flex; gap: 22px; flex-wrap: wrap; }
-.movie-hero img {
+/* Баннер модалки: кадр из фильма + постер поверх */
+.modal-banner {
+  position: relative;
+  margin: -24px -24px 18px;
+  padding: 26px 24px 18px;
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  background-size: 115% auto;
+  background-position: center 25%;
+  border-radius: 18px 18px 0 0;
+  overflow: hidden;
+  animation: bannerIn 0.7s ease-out both;
+}
+@keyframes bannerIn {
+  from { background-size: 145% auto; filter: blur(3px); opacity: 0.55; }
+  to { background-size: 115% auto; filter: blur(0); opacity: 1; }
+}
+.modal-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(14, 14, 18, 0.3), rgba(23, 23, 30, 0.93) 80%, var(--panel));
+}
+.modal-banner.no-image::before { background: linear-gradient(180deg, var(--panel-2), var(--panel)); }
+.modal-banner > * { position: relative; z-index: 1; }
+.modal-banner.no-image { background: var(--panel-2); }
+
+.hero-poster {
   width: 200px;
   border-radius: 12px;
   object-fit: cover;
   align-self: flex-start;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
 }
 
 .movie-info { flex: 1; min-width: 260px; }
+.movie-body { padding: 0 2px; }
 .movie-info h2 { margin: 0 0 6px; font-size: 22px; }
 .movie-sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
 .ratings { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -361,6 +390,16 @@ a:hover { text-decoration: underline; }
   border-radius: 999px;
 }
 .overview { font-size: 14px; line-height: 1.6; color: #d5d5de; }
+
+.movie-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.trailer-wrap {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.trailer-wrap iframe { width: 100%; height: 100%; border: 0; display: block; }
 
 .cast-section h3 { font-size: 15px; margin: 22px 0 10px; }
 .cast-row {
@@ -399,6 +438,46 @@ a:hover { text-decoration: underline; }
   color: #4a4a5c;
 }
 
+/* Похожие фильмы */
+.similar-section h3 { font-size: 15px; margin: 22px 0 10px; }
+.similar-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+.similar-card {
+  flex: 0 0 110px;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.similar-card:hover { transform: translateY(-3px); }
+.similar-card img {
+  width: 110px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--panel-2);
+  display: block;
+}
+.similar-card span {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Интересные факты */
+.facts-section h3 { font-size: 15px; margin: 22px 0 10px; }
+.facts-section ul { margin: 0; padding-left: 18px; }
+.facts-section li { font-size: 13px; line-height: 1.55; color: #d5d5de; margin-bottom: 6px; }
+
 /* ── Подвал ────────────────────────────────────────── */
 .site-footer {
   color: #6b6b7c;
@@ -412,7 +491,8 @@ a:hover { text-decoration: underline; }
 @media (max-width: 640px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
   .card .meta b { font-size: 11px; }
-  .movie-hero img { width: 140px; }
+  .hero-poster { width: 130px; }
   .modal-card { padding: 18px; }
+  .modal-banner { margin: -18px -18px 14px; padding: 20px 16px 14px; }
   .controls { position: static; }
 }
