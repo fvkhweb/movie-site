@@ -206,10 +206,33 @@ def get_kp_unofficial(title, year):
             "description": description,
             "kp_rating": rating,
             "facts": facts,
+            "film_id": film_id,
         }
     except Exception as e:
         print(f"  КП-Unofficial ошибка для '{title}': {e}")
     return None
+
+
+def get_kp_frame(kp_id):
+    """Кадр из фильма через Kinopoisk Unofficial (картинка на Яндекс.CDN —
+    открывается из РФ без VPN и прокси)."""
+    if not KPU_API_KEY or not kp_id:
+        return ""
+    base = KPU_BASE.rsplit("/v2.2", 1)[0]
+    for ver in ("v2.1", "v2.2"):
+        try:
+            r = session.get(f"{base}/{ver}/films/{kp_id}/frames", headers=KPU_HEADERS, timeout=15)
+            if r.status_code == 200:
+                items = r.json().get("items", [])
+                if items and items[0].get("image"):
+                    return items[0]["image"]
+                return ""
+            if r.status_code == 404:
+                return ""
+            print(f"  КП-Unofficial кадры {kp_id} ({ver}): HTTP {r.status_code}")
+        except Exception as e:
+            print(f"  КП-Unofficial кадры {kp_id}: {e}")
+    return ""
 
 
 def get_recommendations(movie_id):
@@ -253,7 +276,6 @@ def get_kp_data(title, year):
         movie = docs[0]
         kp_id = movie["id"]
         poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
-
         time.sleep(0.3)
         d_resp = session.get(f"{KP_BASE}/{kp_id}", headers=KP_HEADERS, timeout=15)
         if d_resp.status_code != 200:
@@ -270,6 +292,7 @@ def get_kp_data(title, year):
             "poster": (details.get("poster") or {}).get("url") or poster,
             "description": details.get("description") or movie.get("description"),
             "kp_rating": (details.get("rating") or {}).get("kp"),
+            "kp_id": kp_id,
         }
     except Exception as e:
         print(f"  КП ошибка для '{title}': {e}")
@@ -316,9 +339,12 @@ def build_catalog():
     # Кинопоиск — обогащение двух источников по убыванию популярности:
     # сначала kinopoisk.dev, затем Kinopoisk Unofficial (факты + резерв).
     movies_raw.sort(key=lambda m: m["popularity"], reverse=True)
+    kp_ids = {}  # tmdb_id -> id Кинопоиска (для кадров)
     for m in movies_raw[:KP_MAX_MOVIES]:
         kp = get_kp_data(m["title"], m["year"])
         if kp:
+            if kp.get("kp_id"):
+                kp_ids[m["id"]] = kp["kp_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
             if kp.get("kp_rating"):
@@ -330,6 +356,8 @@ def build_catalog():
     for m in movies_raw[KP_MAX_MOVIES:KP_MAX_MOVIES + UNOFFICIAL_MAX_MOVIES]:
         kp = get_kp_unofficial(m["title"], m["year"])
         if kp:
+            if kp.get("film_id"):
+                kp_ids[m["id"]] = kp["film_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
             if kp.get("kp_rating"):
@@ -339,6 +367,13 @@ def build_catalog():
             if kp.get("facts"):
                 m["facts"] = kp["facts"]
         time.sleep(0.3)
+
+    # Кадры из фильмов (Яндекс.CDN — работают из РФ без VPN)
+    for m in movies_raw:
+        frame = get_kp_frame(kp_ids.get(m["id"]))
+        if frame:
+            m["frame"] = frame
+        time.sleep(0.2)
 
     # Постеры (параллельно)
     def job(m):
@@ -382,6 +417,8 @@ def build_catalog():
             m.pop("facts", None)
         if not m.get("backdrop"):
             m.pop("backdrop", None)
+        if not m.get("frame"):
+            m.pop("frame", None)
 
     save("movies", movies)
     save("genres", genres)

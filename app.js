@@ -387,31 +387,30 @@ function openModal(id) {
     ${castHtml}
     ${similarHtml}`;
 
-  // Кадр на фоне баннера грузим проверкой: если не сработало — останется аккуратный градиент
-  if (m.backdrop) {
-    const banner = el("modalBody").querySelector(".modal-banner");
-    const path = `image.tmdb.org/t/p/w780${m.backdrop}`;
-    const apply = (url) => {
-      if (banner && banner.isConnected) {
-        banner.style.backgroundImage = `url('${url}')`;
-        banner.classList.remove("no-image");
-      }
-    };
-    const tryProxy = (proxy) => {
-      const url = `${proxy}${path}`;
-      const probe = new Image();
-      probe.onload = () => apply(url);
-      probe.onerror = () => { if (proxy !== "direct") tryProxy("direct"); };
-      probe.src = url;
-    };
-    tryProxy(PROXY_IMG);
-    if (PROXY_IMG_2) {
-      // второй прокси пробуем параллельно — чей ответ быстрее, тот и останется
-      const url2 = `${PROXY_IMG_2}${path}`;
-      const probe2 = new Image();
-      probe2.onload = () => { if (banner && !banner.classList.contains("no-image")) return; apply(url2); };
-      probe2.src = url2;
+  // Кадр на фоне баннера: сначала кадр Кинопоиска (Яндекс.CDN — работает
+  // из РФ без VPN), затем TMDB-кадр через прокси. Если всё мимо — градиент.
+  const banner = el("modalBody").querySelector(".modal-banner");
+  const apply = (url) => {
+    if (banner && banner.isConnected) {
+      banner.style.backgroundImage = `url('${url}')`;
+      banner.classList.remove("no-image");
     }
+  };
+  const probe = (url, onFail) => {
+    const im = new Image();
+    im.onload = () => apply(url);
+    im.onerror = () => onFail && onFail();
+    im.src = url;
+  };
+  const tryTmdbBackdrop = () => {
+    if (!m.backdrop) return;
+    const path = `image.tmdb.org/t/p/w780${m.backdrop}`;
+    probe(`${PROXY_IMG}${path}`, () => probe(`${PROXY_IMG_2}${path}`, () => probe(`https://${path}`)));
+  };
+  if (m.frame) {
+    probe(m.frame, tryTmdbBackdrop);
+  } else {
+    tryTmdbBackdrop();
   }
 
   el("movieModal").hidden = false;
