@@ -3,34 +3,89 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Каталог фильмов: фильтры по жанрам, годам и рейтингу, актёры, случайный фильм. Работает без VPN.">
   <title>Что посмотреть?</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>🎬 Что посмотреть?</h1>
-  
-  <div class="top-controls">
-    <div class="tabs">
-      <button id="tab-popular" class="active" onclick="switchTab('popular')">Популярное</button>
-      <button id="tab-top" onclick="switchTab('top_rated')">Топ по рейтингу</button>
+  <header class="site-header">
+    <div class="brand">
+      <h1>🎬 Что посмотреть?</h1>
+      <p class="tagline" id="catalogInfo">Каталог фильмов</p>
     </div>
-    
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-view="popular">🔥 Популярное</button>
+      <button class="tab" data-view="top_rated">🏆 Топ по рейтингу</button>
+      <button class="tab" data-view="all">🎞 Каталог</button>
+      <button class="tab" data-view="favorites">❤️ Избранное<span id="favCount" class="fav-count" hidden></span></button>
+    </nav>
+  </header>
+
+  <div class="controls" id="controls">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input id="search" type="text" placeholder="Фильм или актёр..." autocomplete="off">
+      <button id="clearSearch" class="icon-btn" title="Очистить" hidden>✕</button>
+    </div>
+
     <div class="filters">
-      <input id="search" type="text" placeholder="Поиск по названию...">
-      <select id="sortSelect">
-        <option value="default">По умолчанию</option>
-        <option value="rating_desc">Рейтинг (высокий → низкий)</option>
-        <option value="year_desc">Год (новые → старые)</option>
-        <option value="title_asc">Название (А → Я)</option>
+      <select id="genreSelect" title="Жанр">
+        <option value="">Все жанры</option>
       </select>
+
+      <div class="year-range">
+        <select id="yearFrom" title="Год от"><option value="">Год от</option></select>
+        <span>—</span>
+        <select id="yearTo" title="Год до"><option value="">Год до</option></select>
+      </div>
+
+      <select id="ratingMin" title="Рейтинг не ниже">
+        <option value="">Любой рейтинг</option>
+        <option value="9">⭐ 9+</option>
+        <option value="8">⭐ 8+</option>
+        <option value="7">⭐ 7+</option>
+        <option value="6">⭐ 6+</option>
+        <option value="5">⭐ 5+</option>
+      </select>
+
+      <select id="sortSelect" title="Сортировка">
+        <option value="default">По популярности</option>
+        <option value="rating_desc">Рейтинг ↓</option>
+        <option value="kp_rating_desc">Рейтинг КП ↓</option>
+        <option value="year_desc">Год ↓</option>
+        <option value="year_asc">Год ↑</option>
+        <option value="title_asc">Название А→Я</option>
+        <option value="runtime_desc">Длительность ↓</option>
+      </select>
+
+      <button id="randomBtn" class="btn-accent" title="Случайный фильм из текущей подборки">🎲 Случайный</button>
+      <button id="resetBtn" class="btn-ghost" title="Сбросить все фильтры">Сброс</button>
     </div>
+
+    <p class="results-count" id="resultsCount"></p>
   </div>
 
-  <div id="grid" class="grid"></div>
+  <main>
+    <div id="grid" class="grid" aria-live="polite"></div>
+    <div id="sentinel" class="sentinel" hidden></div>
+    <div id="emptyState" class="empty" hidden>
+      <div class="empty-icon">🍿</div>
+      <p>Ничего не нашлось</p>
+      <p class="empty-hint">Попробуйте изменить фильтры или нажать «Сброс»</p>
+    </div>
+  </main>
 
-  <div id="movieModal" class="modal">
-    <div class="modal-content">
-      <span class="close-button">&times;</span>
+  <footer class="site-footer">
+    Данные — <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> и
+    <a href="https://kinopoisk.dev" target="_blank" rel="noopener">Кинопоиск API</a>.
+    Постеры хранятся в репозитории, сайт работает без VPN.
+  </footer>
+
+  <div id="movieModal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-card">
+      <button class="modal-close" id="modalClose" title="Закрыть">✕</button>
       <div id="modalBody"></div>
     </div>
   </div>
