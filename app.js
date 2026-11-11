@@ -3,6 +3,8 @@
 
 const PAGE_SIZE = 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
+const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
+const DATA_VERSION = "4"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -16,6 +18,7 @@ const state = {
   favorites: JSON.parse(localStorage.getItem("favorites") || "[]"),
   limit: PAGE_SIZE,
   actor: "",    // фильтр «фильмы актёра»
+  currentModal: null, // какой фильм открыт в модалке
 };
 
 const el = (id) => document.getElementById(id);
@@ -32,9 +35,14 @@ function escapeAttr(v) {
   return escapeHtml(v);
 }
 
-function personPhoto(path, width) {
-  if (!path) return "";
-  return `${PROXY_IMG}image.tmdb.org/t/p/w${width || 185}${path}`;
+function personPhotoSources(path, width) {
+  // Цепочка: wsrv → images.weserv.nl → прямой TMDB. Хотя бы одно сработает.
+  if (!path) return null;
+  const p = `image.tmdb.org/t/p/w${width || 185}${path}`;
+  return {
+    src: `${PROXY_IMG}${p}`,
+    fallback: `${PROXY_IMG_2}${p}|https://${p}`,
+  };
 }
 
 function ratingClass(value) {
@@ -64,10 +72,11 @@ function movieById(id) {
 /* ── Загрузка данных ───────────────────────────────── */
 
 async function loadData() {
+  const v = `?v=${DATA_VERSION}`;
   const [moviesRes, genresRes, listsRes] = await Promise.allSettled([
-    fetch("data/movies.json").then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
-    fetch("data/genres.json").then((r) => (r.ok ? r.json() : [])),
-    fetch("data/lists.json").then((r) => (r.ok ? r.json() : null)),
+    fetch(`data/movies.json${v}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+    fetch(`data/genres.json${v}`).then((r) => (r.ok ? r.json() : [])),
+    fetch(`data/lists.json${v}`).then((r) => (r.ok ? r.json() : null)),
   ]);
 
   if (moviesRes.status !== "fulfilled" || !Array.isArray(moviesRes.value) || !moviesRes.value.length) {
@@ -88,13 +97,15 @@ async function loadData() {
 
   // Актёры грузим в фоне — поиск по актёрам заработает после загрузки
   Promise.allSettled([
-    fetch("data/cast.json").then((r) => (r.ok ? r.json() : null)),
-    fetch("data/people.json").then((r) => (r.ok ? r.json() : null)),
+    fetch(`data/cast.json${v}`).then((r) => (r.ok ? r.json() : null)),
+    fetch(`data/people.json${v}`).then((r) => (r.ok ? r.json() : null)),
   ]).then(([cast, people]) => {
     state.cast = cast.status === "fulfilled" ? cast.value : null;
     state.people = people.status === "fulfilled" ? people.value : null;
-    // Если пользователь уже что-то ищет — пересчитаем с учётом актёров
+    // Если пользователь уже что-то ищет — пересчитаем с учётом актёров,
+    // а открытую модалку перерисуем с актёрами
     if (el("search").value.trim() || state.actor) render();
+    if (!el("movieModal").hidden && state.currentModal) openModal(state.currentModal);
   });
 }
 
@@ -107,10 +118,12 @@ function fillControls() {
 
   const genreSelect = el("genreSelect");
   state.genres.forEach((g) => {
-    const opt = document.createElement("option");
-    opt.value = g.id;
-    opt.textContent = g.name;
-    genreSelect.appendChild(opt);
+    for (const [sel, prefix] of [[genreSelect, ""], [el("genreExclude"), "не: "]]) {
+      const opt = document.createElement("option");
+      opt.value = g.id;
+      opt.textContent = prefix + g.name;
+      sel.appendChild(opt);
+    }
   });
 
   for (const sel of [el("yearFrom"), el("yearTo")]) {
@@ -155,6 +168,7 @@ function filteredList() {
 
   const q = el("search").value.trim().toLowerCase();
   const genre = el("genreSelect").value;
+  const genreExclude = el("genreExclude").value;
   const yFrom = el("yearFrom").value;
   const yTo = el("yearTo").value;
   const ratingMin = el("ratingMin").value;
@@ -172,6 +186,7 @@ function filteredList() {
 
   list = list.filter((m) => {
     if (state.actor) return actorIds.has(m.id);
+    if (genreExclude && (m.genres || []).includes(Number(genreExclude))) return false;
     if (genre && !(m.genres || []).includes(Number(genre))) return false;
     if (yFrom && parseInt(m.year, 10) < Number(yFrom)) return false;
     if (yTo && parseInt(m.year, 10) > Number(yTo)) return false;
@@ -290,6 +305,7 @@ function toggleFavorite(id, btn) {
 function openModal(id) {
   const m = movieById(id);
   if (!m) return;
+  state.currentModal = id;
 
   const { local, fallback } = posterSources(m);
   const isFav = state.favorites.includes(m.id);
@@ -313,7 +329,10 @@ function openModal(id) {
       <div class="cast-card" data-actor="${escapeAttr(c.name)}" title="Фильмы актёра">
         ${
           c.photo
-            ? `<img alt="${escapeAttr(c.name)}" loading="lazy" src="${escapeAttr(personPhoto(c.photo))}">`
+            ? (() => {
+                const ps = personPhotoSources(c.photo);
+                return `<img alt="${escapeAttr(c.name)}" loading="lazy" src="${escapeAttr(ps.src)}" data-fallback="${escapeAttr(ps.fallback)}">`;
+              })()
             : `<div class="cast-photo-empty">🎭</div>`
         }
         <div class="cast-name">${escapeHtml(c.name)}</div>
@@ -344,7 +363,7 @@ function openModal(id) {
     : "";
 
   el("modalBody").innerHTML = `
-    <div class="modal-banner ${m.backdrop ? "" : "no-image"}" ${m.backdrop ? `style="background-image:url('${escapeAttr(personPhoto(m.backdrop, 780))}')"` : ""}>
+    <div class="modal-banner no-image">
       ${
         local || fallback
           ? `<img class="hero-poster" alt="${escapeAttr(m.title || "")}" src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>`
@@ -367,6 +386,33 @@ function openModal(id) {
     ${factsHtml}
     ${castHtml}
     ${similarHtml}`;
+
+  // Кадр на фоне баннера грузим проверкой: если не сработало — останется аккуратный градиент
+  if (m.backdrop) {
+    const banner = el("modalBody").querySelector(".modal-banner");
+    const path = `image.tmdb.org/t/p/w780${m.backdrop}`;
+    const apply = (url) => {
+      if (banner && banner.isConnected) {
+        banner.style.backgroundImage = `url('${url}')`;
+        banner.classList.remove("no-image");
+      }
+    };
+    const tryProxy = (proxy) => {
+      const url = `${proxy}${path}`;
+      const probe = new Image();
+      probe.onload = () => apply(url);
+      probe.onerror = () => { if (proxy !== "direct") tryProxy("direct"); };
+      probe.src = url;
+    };
+    tryProxy(PROXY_IMG);
+    if (PROXY_IMG_2) {
+      // второй прокси пробуем параллельно — чей ответ быстрее, тот и останется
+      const url2 = `${PROXY_IMG_2}${path}`;
+      const probe2 = new Image();
+      probe2.onload = () => { if (banner && !banner.classList.contains("no-image")) return; apply(url2); };
+      probe2.src = url2;
+    }
+  }
 
   el("movieModal").hidden = false;
   document.body.style.overflow = "hidden";
@@ -391,10 +437,12 @@ function bindImageFallbacks(root) {
     (e) => {
       const img = e.target;
       if (img.tagName !== "IMG") return;
-      const fb = img.dataset.fallback;
-      if (fb) {
-        delete img.dataset.fallback;
-        img.src = fb;
+      // data-fallback может содержать цепочку ссылок через |
+      const chain = (img.dataset.fallback || "").split("|").filter(Boolean);
+      if (chain.length) {
+        if (chain.length > 1) img.dataset.fallback = chain.slice(1).join("|");
+        else delete img.dataset.fallback;
+        img.src = chain[0];
       } else {
         img.src = PIXEL;
         img.style.opacity = "0";
@@ -418,7 +466,7 @@ function bindEvents() {
     render();
   });
 
-  for (const id of ["search", "genreSelect", "yearFrom", "yearTo", "ratingMin", "sortSelect"]) {
+  for (const id of ["search", "genreSelect", "genreExclude", "yearFrom", "yearTo", "ratingMin", "sortSelect"]) {
     const node = el(id);
     node.addEventListener(node.tagName === "INPUT" ? "input" : "change", render);
   }
@@ -439,6 +487,7 @@ function bindEvents() {
     el("search").value = "";
     el("clearSearch").hidden = true;
     el("genreSelect").value = "";
+    el("genreExclude").value = "";
     el("yearFrom").value = "";
     el("yearTo").value = "";
     el("ratingMin").value = "";

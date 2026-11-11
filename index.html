@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Каталог фильмов: фильтры по жанрам, годам и рейтингу, актёры, случайный фильм. Работает без VPN.">
   <title>Что посмотреть?</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <header class="site-header">
@@ -32,6 +32,10 @@
     <div class="filters">
       <select id="genreSelect" title="Жанр">
         <option value="">Все жанры</option>
+      </select>
+
+      <select id="genreExclude" title="Исключить жанр">
+        <option value="">Не исключать</option>
       </select>
 
       <div class="year-range">
@@ -90,6 +94,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

@@ -176,22 +176,30 @@ def get_kp_unofficial(title, year):
         rating = f.get("ratingKinopoisk") or f.get("rating")
 
         time.sleep(0.2)
-        d = session.get(f"{KPU_BASE}/films/{film_id}", headers=KPU_HEADERS, timeout=15)
-        if d.status_code == 200:
-            det = d.json()
-            description = det.get("description") or description
-            poster = det.get("posterUrl") or poster
-            rating = det.get("ratingKinopoisk") or rating
-        else:
-            print(f"  КП-Unofficial детали {film_id}: HTTP {d.status_code}")
+        # Детали пробуем в двух версиях API (у тарифов разный доступ)
+        details_data = None
+        for ver in ("v2.2", "v2.1"):
+            d = session.get(f"{KPU_BASE.rsplit('/v2.2', 1)[0]}/{ver}/films/{film_id}",
+                            headers=KPU_HEADERS, timeout=15)
+            if d.status_code == 200:
+                details_data = d.json()
+                break
+            print(f"  КП-Unofficial детали {film_id} ({ver}): HTTP {d.status_code}")
+        if details_data:
+            description = details_data.get("description") or description
+            poster = details_data.get("posterUrl") or poster
+            rating = details_data.get("ratingKinopoisk") or rating
 
         facts = []
         time.sleep(0.2)
-        fr = session.get(f"{KPU_BASE}/films/{film_id}/facts", headers=KPU_HEADERS, timeout=15)
-        if fr.status_code == 200:
-            facts = [i.get("text") for i in fr.json().get("items", []) if i.get("text")][:3]
-        elif fr.status_code not in (404,):
-            print(f"  КП-Unofficial факты {film_id}: HTTP {fr.status_code}")
+        for ver in ("v2.2", "v2.1"):
+            fr = session.get(f"{KPU_BASE.rsplit('/v2.2', 1)[0]}/{ver}/films/{film_id}/facts",
+                             headers=KPU_HEADERS, timeout=15)
+            if fr.status_code == 200:
+                facts = [i.get("text") for i in fr.json().get("items", []) if i.get("text")][:3]
+                break
+            if fr.status_code != 404:
+                print(f"  КП-Unofficial факты {film_id} ({ver}): HTTP {fr.status_code}")
 
         return {
             "poster": poster,
