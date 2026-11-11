@@ -20,21 +20,24 @@ IMG_SOURCES = [
 IMG_MIRROR = "https://wsrv.nl/?url=image.tmdb.org/t/p/" + IMG_SIZE
 
 KP_BASE = "https://api.kinopoisk.dev/v1.4/movie"
-KP_HEADERS = {"X-API-KEY": POISKKINO_API_KEY}
-# У бесплатного тарифа Кинопоиска ~200 запросов/сутки (по 2 на фильм)
-KP_MAX_MOVIES = int(os.environ.get("KP_MAX_MOVIES", "90"))
+# Пул ключей: в секрет можно вписать несколько через запятую
+KP_DEV_KEYS = [k.strip() for k in os.environ.get("POISKKINO_API_KEY", "").replace(";", ",").split(",") if k.strip()]
+KP_HEADERS = {"X-API-KEY": KP_DEV_KEYS[0] if KP_DEV_KEYS else ""}
+# У бесплатного тарифа ~200 запросов/сутки, по 2 на фильм; запас — 90 фильмов на ключ
+KP_MAX_MOVIES = int(os.environ.get("KP_MAX_MOVIES", str(90 * max(1, len(KP_DEV_KEYS)))))
 
 # Второй источник — Kinopoisk Unofficial (kinopoiskapiunofficial.tech),
-# ~500 запросов/сутки бесплатно. Дополняет тот, у кого лимит не выбрался,
-# и даёт интересные факты.
-KPU_API_KEY = os.environ.get("KP_UNOFFICIAL_API_KEY", "")
-KPU_BASE = "https://kinopoiskapiunofficial.tech/api/v2.2"
-KPU_HEADERS = {"X-API-KEY": KPU_API_KEY}
-UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", "120"))
+# ~500 запросов/сутки на каждый ключ. Дополняет тот, у кого лимит не выбрался,
+# и даёт интересные факты и кадры из фильмов.
+KPU_API_KEYS = [k.strip() for k in os.environ.get("KP_UNOFFICIAL_API_KEY", "").replace(";", ",").split(",") if k.strip()]
+KPU_ROOT = "https://kinopoiskapiunofficial.tech/api"
+# ~120 фильмов на ключ (поиск + детали + кадры)
+UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", str(120 * max(1, len(KPU_API_KEYS)))))
+KPU_STATE = {"idx": 0, "exhausted": set(), "premium_logged": set()}
 
-POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "10"))
-TOP_PAGES = int(os.environ.get("TOP_PAGES", "10"))
-GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "2"))
+POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "12"))
+TOP_PAGES = int(os.environ.get("TOP_PAGES", "12"))
+GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "3"))
 API_WORKERS = int(os.environ.get("API_WORKERS", "8"))
 DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "8"))
 TEST_LIMIT = int(os.environ.get("LIMIT_MOVIES", "0"))  # >0 — только для локального теста
@@ -152,7 +155,7 @@ def enrich_movie(m):
 
 def get_kp_unofficial(title, year):
     """Резервный источник данных о фильме: Kinopoisk Unofficial API."""
-    if not KPU_API_KEY:
+    if not KPU_API_KEYS:
         return None
     try:
         params = {"keyword": title}
@@ -160,9 +163,10 @@ def get_kp_unofficial(title, year):
             params["yearFrom"] = year
             params["yearTo"] = year
 
-        r = session.get(f"{KPU_BASE}/films", headers=KPU_HEADERS, params=params, timeout=15)
-        if r.status_code != 200:
-            print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code}")
+        r = kpu_get("v2.2/films", params)
+        if r is None or r.status_code != 200:
+            if r is not None and r.status_code not in (402, 429):
+                print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code}")
             return None
 
         films = r.json().get("films", [])
@@ -179,12 +183,12 @@ def get_kp_unofficial(title, year):
         # Детали пробуем в двух версиях API (у тарифов разный доступ)
         details_data = None
         for ver in ("v2.2", "v2.1"):
-            d = session.get(f"{KPU_BASE.rsplit('/v2.2', 1)[0]}/{ver}/films/{film_id}",
-                            headers=KPU_HEADERS, timeout=15)
+            d = kpu_get(f"{ver}/films/{film_id}")
+            if d is None:
+                break
             if d.status_code == 200:
                 details_data = d.json()
                 break
-            print(f"  КП-Unofficial детали {film_id} ({ver}): HTTP {d.status_code}")
         if details_data:
             description = details_data.get("description") or description
             poster = details_data.get("posterUrl") or poster
@@ -193,14 +197,12 @@ def get_kp_unofficial(title, year):
         facts = []
         time.sleep(0.2)
         for ver in ("v2.2", "v2.1"):
-            fr = session.get(f"{KPU_BASE.rsplit('/v2.2', 1)[0]}/{ver}/films/{film_id}/facts",
-                             headers=KPU_HEADERS, timeout=15)
+            fr = kpu_get(f"{ver}/films/{film_id}/facts")
+            if fr is None:
+                break
             if fr.status_code == 200:
                 facts = [i.get("text") for i in fr.json().get("items", []) if i.get("text")][:3]
                 break
-            if fr.status_code != 404:
-                print(f"  КП-Unofficial факты {film_id} ({ver}): HTTP {fr.status_code}")
-
         return {
             "poster": poster,
             "description": description,
@@ -213,25 +215,53 @@ def get_kp_unofficial(title, year):
     return None
 
 
+def kpu_get(path, params=None):
+    """Запрос к Kinopoisk Unofficial с ротацией ключей.
+    402/429 — лимит ключа: переключаемся на следующий.
+    403 — метод недоступен на тарифе: просто пропускаем (ключ не тратим)."""
+    if not KPU_API_KEYS:
+        return None
+
+    while True:
+        idx = KPU_STATE["idx"]
+        try:
+            r = session.get(f"{KPU_ROOT}/{path}", headers={"X-API-KEY": KPU_API_KEYS[idx]},
+                            params=params, timeout=15)
+        except Exception as e:
+            print(f"  КП-Unofficial {path}: {e}")
+            return None
+
+        if r.status_code in (402, 429):
+            KPU_STATE["exhausted"].add(idx)
+            rest = [i for i in range(len(KPU_API_KEYS)) if i not in KPU_STATE["exhausted"]]
+            if not rest:
+                print(f"  КП-Unofficial: все ключи исчерпаны")
+                return r
+            KPU_STATE["idx"] = rest[0]
+            continue
+
+        if r.status_code == 403 and "premium" not in KPU_STATE["premium_logged"]:
+            KPU_STATE["premium_logged"].add("premium")
+            print("  КП-Unofficial: метод недоступен на бесплатном тарифе (403)")
+        return r
+
+
 def get_kp_frame(kp_id):
     """Кадр из фильма через Kinopoisk Unofficial (картинка на Яндекс.CDN —
     открывается из РФ без VPN и прокси)."""
-    if not KPU_API_KEY or not kp_id:
+    if not KPU_API_KEYS or not kp_id:
         return ""
-    base = KPU_BASE.rsplit("/v2.2", 1)[0]
     for ver in ("v2.1", "v2.2"):
-        try:
-            r = session.get(f"{base}/{ver}/films/{kp_id}/frames", headers=KPU_HEADERS, timeout=15)
-            if r.status_code == 200:
-                items = r.json().get("items", [])
-                if items and items[0].get("image"):
-                    return items[0]["image"]
-                return ""
-            if r.status_code == 404:
-                return ""
-            print(f"  КП-Unofficial кадры {kp_id} ({ver}): HTTP {r.status_code}")
-        except Exception as e:
-            print(f"  КП-Unofficial кадры {kp_id}: {e}")
+        r = kpu_get(f"{ver}/films/{kp_id}/frames")
+        if r is None:
+            return ""
+        if r.status_code == 200:
+            items = r.json().get("items", [])
+            if items and items[0].get("image"):
+                return items[0]["image"]
+            return ""
+        if r.status_code == 404:
+            return ""
     return ""
 
 
@@ -256,17 +286,43 @@ def get_trailer(movie_id):
     return ""
 
 
+# Пул ключей для kinopoisk.dev с ротацией при исчерпании лимита
+DEV_STATE = {"idx": 0, "exhausted": set()}
+
+
+def kp_dev_get(path, params=None):
+    if not KP_DEV_KEYS:
+        return None
+    while True:
+        idx = DEV_STATE["idx"]
+        try:
+            r = session.get(f"{KP_BASE}{path}", headers={"X-API-KEY": KP_DEV_KEYS[idx]},
+                            params=params, timeout=15)
+        except Exception as e:
+            print(f"  КП-dev {path}: {e}")
+            return None
+        if r.status_code in (402, 429) and len(KP_DEV_KEYS) > 1:
+            rest = [i for i in range(len(KP_DEV_KEYS)) if i not in DEV_STATE["exhausted"]]
+            if not rest:
+                return r
+            DEV_STATE["exhausted"].add(idx)
+            DEV_STATE["idx"] = rest[0]
+            continue
+        return r
+
+
 def get_kp_data(title, year):
-    if not POISKKINO_API_KEY:
+    if not KP_DEV_KEYS:
         return None
     try:
         params = {"query": title, "limit": 1}
         if year and str(year).isdigit():
             params["year"] = year
 
-        r = session.get(f"{KP_BASE}/search", headers=KP_HEADERS, params=params, timeout=15)
-        if r.status_code != 200:
-            print(f"  КП поиск '{title}': HTTP {r.status_code}")
+        time.sleep(0.3)
+        r = kp_dev_get("/search", params)
+        if r is None or r.status_code != 200:
+            print(f"  КП поиск '{title}': HTTP {r.status_code if r else 'нет ключей'}")
             return None
 
         docs = r.json().get("docs", [])
@@ -277,8 +333,8 @@ def get_kp_data(title, year):
         kp_id = movie["id"]
         poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
         time.sleep(0.3)
-        d_resp = session.get(f"{KP_BASE}/{kp_id}", headers=KP_HEADERS, timeout=15)
-        if d_resp.status_code != 200:
+        d_resp = kp_dev_get(f"/{kp_id}")
+        if d_resp is None or d_resp.status_code != 200:
             print(f"  КП детали {kp_id}: HTTP {d_resp.status_code}")
             return {
                 "poster": poster,
