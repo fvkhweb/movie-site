@@ -1,3 +1,4 @@
+import html as html_mod
 import os, json, time, re, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
@@ -209,7 +210,7 @@ def get_kp_unofficial(title, year):
             if fr.status_code == 200:
                 items = fr.json().get("items") or []
                 facts = [
-                    re.sub(r"<[^>]+>", "", i.get("text") or "").strip()
+                    html_mod.unescape(re.sub(r"<[^>]+>", "", i.get("text") or "")).strip()
                     for i in items
                     if i.get("text")
                 ][:3]
