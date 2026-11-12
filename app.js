@@ -4,7 +4,7 @@
 const PAGE_SIZE = 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "4"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "5"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -14,7 +14,7 @@ const state = {
   lists: { popular: [], top_rated: [] },
   cast: null,   // { movieId: [{id, name, character, photo}] }
   people: null, // [{ id, name, photo, movies: [] }]
-  view: "popular",
+  genre: "",    // активный жанр (чипсы)
   favorites: JSON.parse(localStorage.getItem("favorites") || "[]"),
   limit: PAGE_SIZE,
   actor: "",    // фильтр «фильмы актёра»
@@ -90,10 +90,11 @@ async function loadData() {
   state.genres = Array.isArray(genresRes.value) ? genresRes.value : [];
   if (listsRes.value) state.lists = listsRes.value;
 
-  el("catalogInfo").textContent = `Каталог: ${state.movies.length} фильмов`;
-
   fillControls();
+  buildChips();
   render();
+  renderFeature();
+  renderGenres();
 
   // Актёры грузим в фоне — поиск по актёрам заработает после загрузки
   Promise.allSettled([
@@ -116,14 +117,11 @@ function fillControls() {
   const minYear = Math.min(...years);
   const maxYear = Math.max(...years);
 
-  const genreSelect = el("genreSelect");
   state.genres.forEach((g) => {
-    for (const [sel, prefix] of [[genreSelect, ""], [el("genreExclude"), "не: "]]) {
-      const opt = document.createElement("option");
-      opt.value = g.id;
-      opt.textContent = prefix + g.name;
-      sel.appendChild(opt);
-    }
+    const opt = document.createElement("option");
+    opt.value = g.id;
+    opt.textContent = "не: " + g.name;
+    el("genreExclude").appendChild(opt);
   });
 
   for (const sel of [el("yearFrom"), el("yearTo")]) {
@@ -136,18 +134,41 @@ function fillControls() {
   }
 }
 
+/* ── Чипсы жанров (как в макете) ───────────────────── */
+
+function buildChips() {
+  const chips = el("chips");
+  chips.innerHTML = "";
+  const all = document.createElement("button");
+  all.className = "chip active";
+  all.dataset.genre = "";
+  all.textContent = "Все фильмы";
+  chips.appendChild(all);
+  state.genres.forEach((g) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.dataset.genre = g.id;
+    b.textContent = g.name.charAt(0).toUpperCase() + g.name.slice(1);
+    chips.appendChild(b);
+  });
+  chips.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    setGenre(chip.dataset.genre);
+  });
+}
+
+function setGenre(genreId) {
+  state.genre = genreId;
+  document.querySelectorAll("#chips .chip").forEach((c) =>
+    c.classList.toggle("active", c.dataset.genre === genreId)
+  );
+  render();
+}
+
 /* ── Фильтрация ────────────────────────────────────── */
 
 function currentList() {
-  if (state.view === "favorites") {
-    return state.favorites.map(movieById).filter(Boolean);
-  }
-  if (state.view === "top_rated") {
-    return (state.lists.top_rated || []).map(movieById).filter(Boolean);
-  }
-  if (state.view === "popular") {
-    return (state.lists.popular || []).map(movieById).filter(Boolean);
-  }
   return state.movies;
 }
 
@@ -167,7 +188,7 @@ function filteredList() {
   let list = currentList();
 
   const q = el("search").value.trim().toLowerCase();
-  const genre = el("genreSelect").value;
+  const genre = state.genre;
   const genreExclude = el("genreExclude").value;
   const yFrom = el("yearFrom").value;
   const yTo = el("yearTo").value;
@@ -207,35 +228,44 @@ function filteredList() {
   else if (sortType === "year_asc") list.sort((a, b) => num(a.year) - num(b.year));
   else if (sortType === "title_asc") list.sort((a, b) => byId(a.title, b.title, 1));
   else if (sortType === "runtime_desc") list.sort((a, b) => num(b.runtime) - num(a.runtime));
-  else if (state.view === "all") list.sort((a, b) => num(b.popularity) - num(a.popularity));
+  else list.sort((a, b) => num(b.popularity) - num(a.popularity));
 
   return list;
 }
 
 /* ── Отрисовка ─────────────────────────────────────── */
 
+const GENRE_EN = {
+  28: "ACTION", 12: "ADVENTURE", 16: "ANIMATION", 35: "COMEDY", 80: "CRIME",
+  99: "DOCUMENTARY", 18: "DRAMA", 10751: "FAMILY", 14: "FANTASY", 36: "HISTORY",
+  27: "HORROR", 10402: "MUSIC", 9648: "MYSTERY", 10749: "ROMANCE", 878: "SCI-FI",
+  10770: "TV MOVIE", 53: "THRILLER", 10752: "WAR", 37: "WESTERN",
+};
+
+function filmsWord(n) {
+  const d = n % 10, h = n % 100;
+  if (d === 1 && h !== 11) return "ФИЛЬМ";
+  if (d >= 2 && d <= 4 && (h < 12 || h > 14)) return "ФИЛЬМА";
+  return "ФИЛЬМОВ";
+}
+
 function cardHtml(m) {
   const { local, fallback } = posterSources(m);
   const isFav = state.favorites.includes(m.id);
   const rating = m.rating ? Number(m.rating).toFixed(1) : "";
-  const genresText = (m.genres || [])
-    .map((id) => (state.genres.find((g) => g.id === id) || {}).name)
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(" • ");
+  const genreName = (state.genres.find((g) => g.id === (m.genres || [])[0]) || {}).name || "";
 
   return `
-  <div class="card" data-id="${m.id}">
-    <img alt="${escapeAttr(m.title || "")}" loading="lazy"
-         src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>
-    <div class="shade"></div>
-    ${rating ? `<span class="rating-badge ${ratingClass(m.rating)}">⭐ ${rating}</span>` : ""}
-    <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" title="В избранное">${isFav ? "❤" : "🤍"}</button>
-    <div class="meta">
-      <b>${escapeHtml(m.title || "Без названия")}</b>
-      <span>${escapeHtml([m.year || "", genresText].filter(Boolean).join(" • "))}</span>
+  <article class="movie" data-id="${m.id}">
+    <div class="poster">
+      <img alt="${escapeAttr(m.title || "")}" loading="lazy"
+           src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>
+      ${rating ? `<span class="poster-rating">★ ${rating}</span>` : ""}
+      <button class="heart ${isFav ? "saved" : ""}" data-id="${m.id}" aria-label="В избранное">${isFav ? "♥" : "♡"}</button>
     </div>
-  </div>`;
+    <div class="movie-title">${escapeHtml(m.title || "Без названия")}</div>
+    <div class="movie-sub">${escapeHtml(m.year || "")}${genreName ? " &nbsp;·&nbsp; " + escapeHtml(genreName.toUpperCase()) : ""}</div>
+  </article>`;
 }
 
 function render() {
@@ -247,10 +277,91 @@ function render() {
 
   el("emptyState").hidden = list.length > 0;
   updateResultsCount(list.length);
-
+  updateCatalogTitle();
   grid.innerHTML = list.slice(0, state.limit).map(cardHtml).join("");
   el("sentinel").hidden = list.length <= state.limit;
+
+  renderSaved();
+  renderFeature();
   updateFavBadge();
+}
+
+/* ── Фич-блок «Выбор редакции» ─────────────────────── */
+
+function renderFeature() {
+  const feature = el("feature");
+  if (!feature || !state.movies.length) return;
+  const m = [...state.movies]
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+    .find((x) => x.description && x.rating);
+  if (!m) return;
+
+  const { local, fallback } = posterSources(m);
+  const isFav = state.favorites.includes(m.id);
+  const genreName = (state.genres.find((g) => g.id === (m.genres || [])[0]) || {}).name || "";
+  const tag = [genreName.toUpperCase(), (m.countries || [])[0]?.toUpperCase()].filter(Boolean).join(" / ");
+
+  feature.innerHTML = `
+    <div class="feature-art">
+      <img alt="${escapeAttr(m.title || "")}" src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>
+      <div class="feature-index">FEATURED FILM — 001</div>
+    </div>
+    <div class="feature-copy">
+      <div class="tag">${escapeHtml(tag || "ВЫБОР РЕДАКЦИИ")}</div>
+      <h2>${escapeHtml(m.title || "")}</h2>
+      <div class="meta">
+        ${m.year ? `<span>${escapeHtml(m.year)}</span>` : ""}
+        ${m.runtime ? `<span>${runtimeLabel(m.runtime).toUpperCase()}</span>` : ""}
+        <span class="rating">★ ${Number(m.rating).toFixed(1)}</span>
+      </div>
+      <p>${escapeHtml(m.description)}</p>
+      <div class="feature-actions">
+        <button class="primary" data-open="${m.id}">О фильме <span>↗</span></button>
+        <button class="secondary" data-heart="${m.id}">${isFav ? "♥ В избранном" : "＋ В избранное"}</button>
+      </div>
+    </div>`;
+  feature.hidden = false;
+}
+
+/* ── Карточки жанров ───────────────────────────────── */
+
+function renderGenres() {
+  const strip = el("genreStrip");
+  if (!strip || !state.movies.length) return;
+  const counts = {};
+  state.movies.forEach((m) => (m.genres || []).forEach((g) => { counts[g] = (counts[g] || 0) + 1; }));
+  const top = state.genres
+    .map((g) => ({ ...g, count: counts[g.id] || 0 }))
+    .filter((g) => g.count > 4)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+
+  strip.innerHTML = top
+    .map(
+      (g) => `
+    <div class="genre-card" data-genre="${g.id}">
+      <b>${escapeHtml(g.name.charAt(0).toUpperCase() + g.name.slice(1))}</b>
+      <span>${GENRE_EN[g.id] || "GENRE"} / ${g.count} ${filmsWord(g.count)} ↗</span>
+    </div>`
+    )
+    .join("");
+
+  strip.addEventListener("click", (e) => {
+    const card = e.target.closest(".genre-card");
+    if (!card) return;
+    setGenre(card.dataset.genre);
+    el("catalog").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+/* ── «Твой список» ─────────────────────────────────── */
+
+function renderSaved() {
+  const grid = el("savedGrid");
+  if (!grid) return;
+  const list = state.favorites.map(movieById).filter(Boolean);
+  grid.innerHTML = list.map(cardHtml).join("");
+  el("savedEmpty").hidden = list.length > 0;
 }
 
 function renderMore() {
@@ -268,36 +379,53 @@ function renderMore() {
 }
 
 function updateResultsCount(count) {
-  const parts = [];
-  parts.push(`Найдено: ${count}`);
-  if (state.actor) parts.push(`актёр: «${escapeHtml(state.actor)}» <button class="icon-btn" id="clearActor" title="Убрать фильтр">✕</button>`);
-  el("resultsCount").innerHTML = parts.join(" • ");
+  let text = `${count} ${filmsWord(count)}`;
+  if (state.actor) text += ` · АКТЁР: «${escapeHtml(state.actor)}» <button class="iconbtn small" id="clearActor" title="Убрать фильтр">✕</button>`;
+  el("resultCount").innerHTML = text;
   const clearActor = el("clearActor");
   if (clearActor) clearActor.onclick = () => { state.actor = ""; render(); };
+}
+
+function updateCatalogTitle() {
+  const q = el("search").value.trim();
+  const title = q || state.actor
+    ? "РЕЗУЛЬТАТЫ ПОИСКА"
+    : state.genre
+      ? (state.genres.find((g) => String(g.id) === state.genre) || {}).name?.toUpperCase() || "КАТАЛОГ"
+      : "ПОПУЛЯРНОЕ СЕЙЧАС";
+  el("catalogTitle").textContent = title;
 }
 
 function updateFavBadge() {
   const badge = el("favCount");
   if (!badge) return;
-  badge.hidden = state.favorites.length === 0;
-  badge.textContent = state.favorites.length;
+  badge.textContent = `${state.favorites.length} В ИЗБРАННОМ`;
 }
 
 /* ── Избранное ─────────────────────────────────────── */
 
-function toggleFavorite(id, btn) {
+function toggleFavorite(id) {
   const i = state.favorites.indexOf(id);
   if (i === -1) state.favorites.push(id);
   else state.favorites.splice(i, 1);
   localStorage.setItem("favorites", JSON.stringify(state.favorites));
   updateFavBadge();
   // Обновим сердечки везде
+  document.querySelectorAll(`.heart[data-id="${id}"]`).forEach((b) => {
+    const active = state.favorites.includes(id);
+    b.classList.toggle("saved", active);
+    b.textContent = active ? "♥" : "♡";
+  });
   document.querySelectorAll(`.fav-btn[data-id="${id}"]`).forEach((b) => {
     const active = state.favorites.includes(id);
     b.classList.toggle("active", active);
-    b.textContent = active ? "❤" : "🤍";
+    b.textContent = active ? "♥ В избранном" : "＋ В избранное";
   });
-  if (state.view === "favorites") render();
+  document.querySelectorAll(`#feature [data-heart]`).forEach((b) => {
+    b.textContent = state.favorites.includes(id) ? "♥ В избранном" : "＋ В избранное";
+  });
+  renderSaved();
+  renderFeature();
 }
 
 /* ── Модалка ───────────────────────────────────────── */
@@ -375,8 +503,8 @@ function openModal(id) {
         <div class="ratings">${ratings}</div>
         <div class="chips">${genreChips}</div>
         <div class="movie-actions">
-          <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" style="position:static; margin-top:0;" title="В избранное">${isFav ? "❤" : "🤍"}</button>
-          ${m.trailer ? `<button class="btn-accent trailer-btn" data-trailer="${escapeAttr(m.trailer)}">▶ Трейлер</button>` : ""}
+          <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" title="В избранное">${isFav ? "♥ В избранном" : "＋ В избранное"}</button>
+          ${m.trailer ? `<button class="primary trailer-btn" data-trailer="${escapeAttr(m.trailer)}">▶ Трейлер</button>` : ""}
         </div>
       </div>
     </div>
@@ -455,17 +583,11 @@ function bindImageFallbacks(root) {
 
 function bindEvents() {
   bindImageFallbacks(el("grid"));
+  bindImageFallbacks(el("savedGrid"));
+  bindImageFallbacks(el("feature"));
   bindImageFallbacks(el("modalBody"));
 
-  el("tabs").addEventListener("click", (e) => {
-    const tab = e.target.closest(".tab");
-    if (!tab) return;
-    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
-    state.view = tab.dataset.view;
-    render();
-  });
-
-  for (const id of ["search", "genreSelect", "genreExclude", "yearFrom", "yearTo", "ratingMin", "sortSelect"]) {
+  for (const id of ["search", "genreExclude", "yearFrom", "yearTo", "ratingMin", "sortSelect"]) {
     const node = el(id);
     node.addEventListener(node.tagName === "INPUT" ? "input" : "change", render);
   }
@@ -482,35 +604,57 @@ function bindEvents() {
 
   el("randomBtn").addEventListener("click", openRandom);
 
+  el("filterToggle").addEventListener("click", () => {
+    const panel = el("filterPanel");
+    panel.hidden = !panel.hidden;
+    el("filterToggle").querySelector("span").textContent = panel.hidden ? "⌄" : "⌃";
+  });
+
   el("resetBtn").addEventListener("click", () => {
     el("search").value = "";
     el("clearSearch").hidden = true;
-    el("genreSelect").value = "";
     el("genreExclude").value = "";
     el("yearFrom").value = "";
     el("yearTo").value = "";
     el("ratingMin").value = "";
     el("sortSelect").value = "default";
     state.actor = "";
+    setGenre("");
     render();
   });
 
-  // Клик по карточке / сердечку / актёру (делегирование)
-  el("grid").addEventListener("click", (e) => {
-    const fav = e.target.closest(".fav-btn");
-    if (fav) {
+  el("topSearch").addEventListener("click", () => {
+    el("search").focus();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // Клик по карточке / сердечку / фич-блоку (делегирование на документе,
+  // работает и для каталога, и для «Твоего списка»)
+  document.addEventListener("click", (e) => {
+    const heart = e.target.closest(".heart");
+    if (heart) {
       e.stopPropagation();
-      toggleFavorite(Number(fav.dataset.id), fav);
+      toggleFavorite(Number(heart.dataset.id));
       return;
     }
-    const card = e.target.closest(".card");
-    if (card) openModal(Number(card.dataset.id));
+    const featOpen = e.target.closest("#feature [data-open]");
+    if (featOpen) {
+      openModal(Number(featOpen.dataset.open));
+      return;
+    }
+    const featHeart = e.target.closest("#feature [data-heart]");
+    if (featHeart) {
+      toggleFavorite(Number(featHeart.dataset.heart));
+      return;
+    }
+    const movie = e.target.closest(".movie");
+    if (movie) openModal(Number(movie.dataset.id));
   });
 
   el("modalBody").addEventListener("click", (e) => {
     const fav = e.target.closest(".fav-btn");
     if (fav) {
-      toggleFavorite(Number(fav.dataset.id), fav);
+      toggleFavorite(Number(fav.dataset.id));
       return;
     }
     const trailer = e.target.closest(".trailer-btn");
@@ -532,9 +676,9 @@ function bindEvents() {
       state.actor = actor.dataset.actor;
       el("search").value = "";
       el("clearSearch").hidden = true;
-      switchToAll();
       closeModal();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      el("catalog").scrollIntoView({ behavior: "smooth" });
+      render();
       return;
     }
     const similarCard = e.target.closest(".similar-card");
@@ -557,12 +701,6 @@ function bindEvents() {
     if (entries[0].isIntersecting) renderMore();
   }, { rootMargin: "600px" });
   observer.observe(el("sentinel"));
-}
-
-function switchToAll() {
-  state.view = "all";
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === "all"));
-  render();
 }
 
 /* ── Старт ─────────────────────────────────────────── */
