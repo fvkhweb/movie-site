@@ -35,9 +35,9 @@ KPU_ROOT = "https://kinopoiskapiunofficial.tech/api"
 UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", str(120 * max(1, len(KPU_API_KEYS)))))
 KPU_STATE = {"idx": 0, "exhausted": set(), "premium_logged": set()}
 
-POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "12"))
-TOP_PAGES = int(os.environ.get("TOP_PAGES", "12"))
-GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "3"))
+POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "20"))
+TOP_PAGES = int(os.environ.get("TOP_PAGES", "20"))
+GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "6"))
 API_WORKERS = int(os.environ.get("API_WORKERS", "8"))
 DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "8"))
 TEST_LIMIT = int(os.environ.get("LIMIT_MOVIES", "0"))  # >0 — только для локального теста
@@ -165,8 +165,10 @@ def get_kp_unofficial(title, year):
 
         r = kpu_get("v2.2/films", params)
         if r is None or r.status_code != 200:
-            if r is not None and r.status_code not in (402, 429):
-                print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code}")
+            hint = {401: "неверный ключ KP_UNOFFICIAL_API_KEY",
+                    402: "лимит ключа исчерпан",
+                    403: "метод недоступен на тарифе"}.get(r.status_code if r else 0, "")
+            print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code if r else 'нет ключей'} {hint}")
             return None
 
         films = r.json().get("films", [])
@@ -301,7 +303,8 @@ def kp_dev_get(path, params=None):
         except Exception as e:
             print(f"  КП-dev {path}: {e}")
             return None
-        if r.status_code in (402, 429) and len(KP_DEV_KEYS) > 1:
+        if r.status_code in (402, 429, 403) and len(KP_DEV_KEYS) > 1:
+            # У kinopoisk.dev 403 = лимит исчерпан; 401 = неверный ключ (не ротируем)
             rest = [i for i in range(len(KP_DEV_KEYS)) if i not in DEV_STATE["exhausted"]]
             if not rest:
                 return r
