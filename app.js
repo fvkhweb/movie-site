@@ -4,7 +4,7 @@
 const PAGE_SIZE = 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "5"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "6"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -291,19 +291,25 @@ function render() {
 function renderFeature() {
   const feature = el("feature");
   if (!feature || !state.movies.length) return;
-  const m = [...state.movies]
-    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-    .find((x) => x.description && x.rating);
-  if (!m) return;
+  // Если у популярных фильмов есть кадры с Кинопоиска (Яндекс.CDN) —
+  // показываем фильм с кадром: он ландшафтный и красиво заполняет блок
+  const withFrame = state.movies.filter((m) => m.frame && m.description && m.rating);
+  const pool = withFrame.length
+    ? withFrame
+    : state.movies.filter((m) => m.description && m.rating);
+  if (!pool.length) return;
+  const m = pool.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
 
   const { local, fallback } = posterSources(m);
+  const artSrc = m.frame || local;
+  const artFallback = m.frame ? local : fallback;
   const isFav = state.favorites.includes(m.id);
   const genreName = (state.genres.find((g) => g.id === (m.genres || [])[0]) || {}).name || "";
   const tag = [genreName.toUpperCase(), (m.countries || [])[0]?.toUpperCase()].filter(Boolean).join(" / ");
 
   feature.innerHTML = `
     <div class="feature-art">
-      <img alt="${escapeAttr(m.title || "")}" src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>
+      <img alt="${escapeAttr(m.title || "")}" src="${escapeAttr(artSrc)}" ${artFallback ? `data-fallback="${escapeAttr(artFallback)}"` : ""}>
       <div class="feature-index">FEATURED FILM — 001</div>
     </div>
     <div class="feature-copy">
@@ -370,11 +376,14 @@ function renderMore() {
     el("sentinel").hidden = true;
     return;
   }
-  state.limit += PAGE_SIZE;
   const grid = el("grid");
-  const html = list.slice(0, state.limit).map(cardHtml).join("");
-  // Перерисовываем целиком — просто и надёжно при таких объёмах
-  grid.innerHTML = html;
+  const prev = state.limit;
+  state.limit += PAGE_SIZE;
+  // Добавляем только новые карточки — полная перерисовка прерывала бы
+  // плавный скролл по якорям и сбрасывала бы загрузку картинок
+  const frag = document.createElement("div");
+  frag.innerHTML = list.slice(prev, state.limit).map(cardHtml).join("");
+  while (frag.firstChild) grid.appendChild(frag.firstChild);
   el("sentinel").hidden = list.length <= state.limit;
 }
 
@@ -626,6 +635,16 @@ function bindEvents() {
   el("topSearch").addEventListener("click", () => {
     el("search").focus();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // Меню: плавный скролл к секции + активная ссылка
+  document.querySelectorAll(".navlinks a").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      document.querySelectorAll(".navlinks a").forEach((x) => x.classList.toggle("active", x === a));
+      const target = document.querySelector(a.getAttribute("href"));
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   });
 
   // Клик по карточке / сердечку / фич-блоку (делегирование на документе,

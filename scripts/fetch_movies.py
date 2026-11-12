@@ -1,4 +1,4 @@
-import os, json, time, requests
+import os, json, time, re, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
@@ -154,7 +154,8 @@ def enrich_movie(m):
 
 
 def get_kp_unofficial(title, year):
-    """Резервный источник данных о фильме: Kinopoisk Unofficial API."""
+    """Резервный источник данных о фильме: Kinopoisk Unofficial API.
+    Формат поиска v2.2: {"total": N, "items": [...]} с полем kinopoiskId."""
     if not KPU_API_KEYS:
         return None
     try:
@@ -171,7 +172,8 @@ def get_kp_unofficial(title, year):
             print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code if r else 'нет ключей'} {hint}")
             return None
 
-        films = r.json().get("films", [])
+        data = r.json()
+        films = data.get("films") or data.get("items") or []
         if not films:
             return None
 
@@ -182,14 +184,16 @@ def get_kp_unofficial(title, year):
         rating = f.get("ratingKinopoisk") or f.get("rating")
 
         time.sleep(0.2)
-        # Детали пробуем в двух версиях API (у тарифов разный доступ)
+        # Детали пробуем в двух версиях API: v2.2 отдаёт объект напрямую,
+        # v2.1 оборачивает его в {"data": {...}}
         details_data = None
         for ver in ("v2.2", "v2.1"):
             d = kpu_get(f"{ver}/films/{film_id}")
             if d is None:
                 break
             if d.status_code == 200:
-                details_data = d.json()
+                det = d.json()
+                details_data = det.get("data") if isinstance(det.get("data"), dict) else det
                 break
         if details_data:
             description = details_data.get("description") or description
@@ -203,8 +207,14 @@ def get_kp_unofficial(title, year):
             if fr is None:
                 break
             if fr.status_code == 200:
-                facts = [i.get("text") for i in fr.json().get("items", []) if i.get("text")][:3]
-                break
+                items = fr.json().get("items") or []
+                facts = [
+                    re.sub(r"<[^>]+>", "", i.get("text") or "").strip()
+                    for i in items
+                    if i.get("text")
+                ][:3]
+                if facts:
+                    break
         return {
             "poster": poster,
             "description": description,
@@ -249,21 +259,17 @@ def kpu_get(path, params=None):
 
 
 def get_kp_frame(kp_id):
-    """Кадр из фильма через Kinopoisk Unofficial (картинка на Яндекс.CDN —
-    открывается из РФ без VPN и прокси)."""
+    """Кадр из фильма через Kinopoisk Unofficial v2.1 (картинки на Яндекс.CDN —
+    открываются из РФ без VPN и прокси). Ответ: {"frames": [{"image", "preview"}]}."""
     if not KPU_API_KEYS or not kp_id:
         return ""
-    for ver in ("v2.1", "v2.2"):
-        r = kpu_get(f"{ver}/films/{kp_id}/frames")
-        if r is None:
-            return ""
-        if r.status_code == 200:
-            items = r.json().get("items", [])
-            if items and items[0].get("image"):
-                return items[0]["image"]
-            return ""
-        if r.status_code == 404:
-            return ""
+    r = kpu_get(f"v2.1/films/{kp_id}/frames")
+    if r is None:
+        return ""
+    if r.status_code == 200:
+        frames = r.json().get("frames") or []
+        if frames and frames[0].get("image"):
+            return frames[0]["image"]
     return ""
 
 
