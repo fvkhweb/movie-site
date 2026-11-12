@@ -415,6 +415,11 @@ function renderGenres() {
 
 /* ── Подборки (data/collections.json) ──────────────── */
 
+// Какие подборки раскрыты полностью (по id) — по умолчанию показываем
+// первые COLL_PREVIEW карточек, остальное по кнопке «Показать все»
+const COLL_PREVIEW = 10;
+const collOpen = new Set();
+
 function renderCollections() {
   const wrap = el("collectionsList");
   const section = el("collections");
@@ -424,7 +429,9 @@ function renderCollections() {
     .map((c) => {
       const list = c.items.map(movieById).filter(Boolean);
       if (!list.length) return "";
-      const cards = list
+      const open = collOpen.has(c.id);
+      const shown = open ? list : list.slice(0, COLL_PREVIEW);
+      const cards = shown
         .map(
           (m, i) => `
       <div class="coll-card" data-id="${m.id}" title="${escapeAttr(m.title || "")}">
@@ -433,11 +440,18 @@ function renderCollections() {
       </div>`
         )
         .join("");
+      const hidden = list.length - shown.length;
+      const toggle = list.length > COLL_PREVIEW
+        ? `<button class="coll-all" data-collall="${escapeAttr(c.id)}">${
+            open ? "Свернуть" : `Показать все · ${list.length}`
+          } <span>${open ? "↖" : "↘"}</span></button>`
+        : "";
       const meta = `${c.total} ${filmsWord(c.total)} · В КАТАЛОГЕ ${list.length}/${c.total}`;
       return `
     <div class="collection">
       <div class="section-head"><div class="section-title">${escapeHtml((c.title || "").toUpperCase())}</div><div class="section-meta">${escapeHtml(meta)}</div></div>
       <div class="coll-row">${cards}</div>
+      ${toggle}
     </div>`;
     })
     .join("");
@@ -754,6 +768,21 @@ function bindEvents() {
     const collCard = e.target.closest(".coll-card");
     if (collCard) {
       openModal(Number(collCard.dataset.id));
+      return;
+    }
+    const collAll = e.target.closest("[data-collall]");
+    if (collAll) {
+      const id = collAll.dataset.collall;
+      collOpen.has(id) ? collOpen.delete(id) : collOpen.add(id);
+      const wasOpen = collOpen.has(id);
+      renderCollections();
+      // после перерисовки держим нажатую кнопку на месте
+      const btn = document.querySelector(`[data-collall="${id}"]`);
+      if (btn) btn.scrollIntoView({ behavior: "instant", block: "center" });
+      if (wasOpen) {
+        const sec = document.getElementById("collections");
+        sec.scrollIntoView({ behavior: "instant", block: "start" });
+      }
       return;
     }
     const movie = e.target.closest(".movie");
