@@ -6,7 +6,7 @@
   <meta name="description" content="Каталог фильмов: жанры, годы, рейтинг, актёры, избранное. Работает без VPN.">
   <title>Что посмотреть?</title>
   <link rel="stylesheet" href="fonts/fonts.css?v=5">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <header>
@@ -16,6 +16,7 @@
         <a class="active" href="#home">Главная</a>
         <a href="#catalog">Каталог</a>
         <a href="#genres">Жанры</a>
+        <a href="#collections">Подборки</a>
         <a href="#saved" id="favNav">Избранное</a>
       </nav>
       <div class="navright">
@@ -57,6 +58,7 @@
     </div>
 
     <div class="filterpanel" id="filterPanel" hidden>
+      <div class="chips" id="chips"></div>
       <select class="select" id="ratingMin" title="Рейтинг не ниже">
         <option value="">Любой рейтинг</option>
         <option value="9">★ 9+</option>
@@ -69,8 +71,6 @@
       <select class="select" id="yearTo" title="Год до"><option value="">Год до</option></select>
       <select class="select" id="genreExclude" title="Исключить жанр"><option value="">Не исключать</option></select>
     </div>
-
-    <div class="chips" id="chips"></div>
 
     <div class="section-head"><div class="section-title">ВЫБОР РЕДАКЦИИ</div><div class="section-meta">01 / FEATURED</div></div>
     <section class="feature" id="feature" hidden></section>
@@ -118,6 +118,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

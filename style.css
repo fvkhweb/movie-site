@@ -44,9 +44,13 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .select{height:52px;background:#10141b;border:1px solid var(--line);border-radius:9px;color:#c6ccd5;padding:0 14px;min-width:150px;outline:0}
 .filtertoggle{height:52px;padding:0 18px;border:1px solid var(--line);border-radius:9px;background:transparent;color:#c6ccd5;display:flex;gap:9px;align-items:center;white-space:nowrap}
 .filtertoggle:hover{border-color:var(--blue)}
+.filtertoggle.has-genre{border-color:var(--blue);color:#dbe6ff;background:#3268ff14}
 .filterpanel{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
 .filterpanel[hidden]{display:none}
 .filterpanel .select{min-width:140px;flex:1;max-width:220px}
+/* чипсы жанров живут внутри панели фильтров — перенос строк вместо ленты */
+.filterpanel .chips{width:100%;flex-wrap:wrap;overflow:visible;padding:2px 0 0;
+  mask-image:none;-webkit-mask-image:none}
 
 /* ── Чипсы жанров ── */
 .chips{display:flex;gap:8px;overflow:auto;padding:1px 0 26px;scrollbar-width:none;

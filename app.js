@@ -169,6 +169,8 @@ function setGenre(genreId) {
   document.querySelectorAll("#chips .chip").forEach((c) =>
     c.classList.toggle("active", c.dataset.genre === genreId)
   );
+  // жанр живёт внутри панели «Фильтры» — подсвечиваем кнопку
+  el("filterToggle").classList.toggle("has-genre", !!genreId);
   render();
 }
 
@@ -292,6 +294,51 @@ function render() {
   updateFavBadge();
 }
 
+/* ── Прыжок к секции ─────────────────────────────────
+   Мгновенный скролл с коррекцией по кадрам: длинная страница,
+   лента догружает карточки и высота блоков меняется — smooth
+   scroll обрывается на полпути. Мгновенный прыжок надёжнее. */
+function jumpTo(target) {
+  if (!target) return;
+  const headerH = document.querySelector("header")?.offsetHeight || 64;
+  // Секциям у низа страницы не хватает «страницы под ними», чтобы встать
+  // к шапке — временно наращиваем высоту, пока пользователь не уйдёт выше
+  const want = target.getBoundingClientRect().top + window.scrollY - headerH - 8;
+  const max = document.documentElement.scrollHeight - window.innerHeight;
+  if (want > max) {
+    const spacer = document.createElement("div");
+    spacer.style.height = `${want - max}px`;
+    document.body.appendChild(spacer);
+    const release = () => {
+      if (window.scrollY < want - 200) {
+        spacer.remove();
+        window.removeEventListener("scroll", release);
+      }
+    };
+    window.addEventListener("scroll", release, { passive: true });
+  }
+  const align = () => {
+    const y = target.getBoundingClientRect().top + window.scrollY - headerH - 8;
+    window.scrollTo({ top: Math.max(0, y), behavior: "instant" });
+  };
+  align();
+  // Картинки и лента меняют высоту страницы ещё секунду-другую после
+  // прыжка — корректируем позицию, пока она не стабилизируется
+  let stable = 0;
+  let frames = 0;
+  const tick = () => {
+    const delta = target.getBoundingClientRect().top - headerH - 8;
+    if (Math.abs(delta) <= 2) {
+      stable++;
+    } else {
+      stable = 0;
+      align();
+    }
+    if (stable < 10 && frames++ < 180) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 /* ── Фич-блок «Выбор редакции» ─────────────────────── */
 
 function renderFeature() {
@@ -362,7 +409,7 @@ function renderGenres() {
     const card = e.target.closest(".genre-card");
     if (!card) return;
     setGenre(card.dataset.genre);
-    el("catalog").scrollIntoView({ behavior: "smooth", block: "start" });
+    jumpTo(el("catalog"));
   });
 }
 
@@ -676,13 +723,12 @@ function bindEvents() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
-  // Меню: плавный скролл к секции + активная ссылка
+  // Меню: мгновенный прыжок к секции + активная ссылка
   document.querySelectorAll(".navlinks a").forEach((a) => {
     a.addEventListener("click", (e) => {
       e.preventDefault();
       document.querySelectorAll(".navlinks a").forEach((x) => x.classList.toggle("active", x === a));
-      const target = document.querySelector(a.getAttribute("href"));
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      jumpTo(document.querySelector(a.getAttribute("href")));
     });
   });
 
@@ -740,7 +786,7 @@ function bindEvents() {
       el("search").value = "";
       el("clearSearch").hidden = true;
       closeModal();
-      el("catalog").scrollIntoView({ behavior: "smooth" });
+      jumpTo(el("catalog"));
       render();
       return;
     }
