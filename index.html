@@ -6,7 +6,7 @@
   <meta name="description" content="Каталог фильмов: жанры, годы, рейтинг, актёры, избранное. Работает без VPN.">
   <title>Что посмотреть?</title>
   <link rel="stylesheet" href="fonts/fonts.css?v=5">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <header>
@@ -90,6 +90,11 @@
       <div class="genre-strip" id="genreStrip"></div>
     </section>
 
+    <section id="collections" class="catalog-section" hidden>
+      <div class="section-head"><div class="section-title">ПОДБОРКИ</div><div class="section-meta">COLLECTIONS</div></div>
+      <div id="collectionsList"></div>
+    </section>
+
     <section class="catalog-section" id="saved">
       <div class="section-head"><div class="section-title">ТВОЙ СПИСОК</div><div class="section-meta">BOOKMARKS / SAVED</div></div>
       <div class="grid" id="savedGrid"></div>
@@ -113,6 +118,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

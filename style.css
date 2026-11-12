@@ -105,6 +105,17 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .genre-card b{font:600 15px Unbounded}
 .genre-card span{font:10px 'DM Mono';color:var(--muted)}
 
+/* ── Подборки ── */
+.collection{margin-bottom:44px}
+.collection:last-child{margin-bottom:0}
+.collection .section-title{font-size:14px}
+.coll-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+.coll-row::-webkit-scrollbar{display:none}
+.coll-card{flex:none;width:132px;cursor:pointer;position:relative}
+.coll-card img{width:132px;aspect-ratio:2/3;object-fit:cover;border-radius:8px;border:1px solid #ffffff0d;background:var(--panel2);display:block;transition:transform .35s,filter .35s}
+.coll-card:hover img{transform:scale(1.04);filter:brightness(.85)}
+.coll-rank{position:absolute;z-index:1;top:8px;left:8px;background:rgba(9,11,15,.8);border:1px solid #ffffff24;border-radius:4px;padding:4px 7px;font:10px 'DM Mono';color:#dce5ff}
+
 /* ── Подвал ── */
 footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-size:11px}
 .foot{display:flex;justify-content:space-between;gap:20px}

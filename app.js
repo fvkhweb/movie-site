@@ -14,6 +14,7 @@ const state = {
   lists: { popular: [], top_rated: [] },
   cast: null,   // { movieId: [{id, name, character, photo}] }
   people: null, // [{ id, name, photo, movies: [] }]
+  collections: [], // пользовательские подборки (data/collections.json)
   genre: "",    // активный жанр (чипсы)
   favorites: JSON.parse(localStorage.getItem("favorites") || "[]"),
   limit: PAGE_SIZE,
@@ -96,13 +97,18 @@ async function loadData() {
   renderFeature();
   renderGenres();
 
-  // Актёры грузим в фоне — поиск по актёрам заработает после загрузки
+  // Актёры и подборки грузим в фоне — не блокируют первую отрисовку
   Promise.allSettled([
     fetch(`data/cast.json${v}`).then((r) => (r.ok ? r.json() : null)),
     fetch(`data/people.json${v}`).then((r) => (r.ok ? r.json() : null)),
-  ]).then(([cast, people]) => {
+    fetch(`data/collections.json${v}`).then((r) => (r.ok ? r.json() : null)),
+  ]).then(([cast, people, collections]) => {
     state.cast = cast.status === "fulfilled" ? cast.value : null;
     state.people = people.status === "fulfilled" ? people.value : null;
+    if (collections.status === "fulfilled" && collections.value?.collections) {
+      state.collections = collections.value.collections;
+      renderCollections();
+    }
     // Если пользователь уже что-то ищет — пересчитаем с учётом актёров,
     // а открытую модалку перерисуем с актёрами
     if (el("search").value.trim() || state.actor) render();
@@ -358,6 +364,39 @@ function renderGenres() {
     setGenre(card.dataset.genre);
     el("catalog").scrollIntoView({ behavior: "smooth", block: "start" });
   });
+}
+
+/* ── Подборки (data/collections.json) ──────────────── */
+
+function renderCollections() {
+  const wrap = el("collectionsList");
+  const section = el("collections");
+  if (!wrap || !state.collections.length) return;
+
+  wrap.innerHTML = state.collections
+    .map((c) => {
+      const list = c.items.map(movieById).filter(Boolean);
+      if (!list.length) return "";
+      const cards = list
+        .map(
+          (m, i) => `
+      <div class="coll-card" data-id="${m.id}" title="${escapeAttr(m.title || "")}">
+        <span class="coll-rank">${String(i + 1).padStart(3, "0")}</span>
+        <img alt="${escapeAttr(m.title || "")}" loading="lazy" src="${escapeAttr(m.poster || `posters/${m.id}.jpg`)}">
+      </div>`
+        )
+        .join("");
+      const meta = `${c.total} ${filmsWord(c.total)} · В КАТАЛОГЕ ${list.length}/${c.total}`;
+      return `
+    <div class="collection">
+      <div class="section-head"><div class="section-title">${escapeHtml((c.title || "").toUpperCase())}</div><div class="section-meta">${escapeHtml(meta)}</div></div>
+      <div class="coll-row">${cards}</div>
+    </div>`;
+    })
+    .join("");
+
+  if (wrap.innerHTML) section.hidden = false;
+  bindImageFallbacks(wrap);
 }
 
 /* ── «Твой список» ─────────────────────────────────── */
@@ -664,6 +703,11 @@ function bindEvents() {
     const featHeart = e.target.closest("#feature [data-heart]");
     if (featHeart) {
       toggleFavorite(Number(featHeart.dataset.heart));
+      return;
+    }
+    const collCard = e.target.closest(".coll-card");
+    if (collCard) {
+      openModal(Number(collCard.dataset.id));
       return;
     }
     const movie = e.target.closest(".movie");
