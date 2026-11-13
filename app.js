@@ -4,14 +4,14 @@
 const PAGE_SIZE = 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "6"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "7"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 const state = {
   movies: [],
   genres: [],
-  lists: { popular: [], top_rated: [] },
+  lists: { popular: [], top_rated: [], now_playing: [], upcoming: [] },
   cast: null,   // { movieId: [{id, name, character, photo}] }
   people: null, // [{ id, name, photo, movies: [] }]
   collections: [], // пользовательские подборки (data/collections.json)
@@ -20,6 +20,7 @@ const state = {
   limit: PAGE_SIZE,
   actor: "",    // фильтр «фильмы актёра»
   currentModal: null, // какой фильм открыт в модалке
+  homeScroll: 0, // позиция прокрутки до перехода на страницу фильма
 };
 
 const el = (id) => document.getElementById(id);
@@ -89,13 +90,16 @@ async function loadData() {
 
   state.movies = moviesRes.value;
   state.genres = Array.isArray(genresRes.value) ? genresRes.value : [];
-  if (listsRes.value) state.lists = listsRes.value;
+  if (listsRes.value) state.lists = { ...state.lists, ...listsRes.value };
 
   fillControls();
   buildChips();
   render();
   renderFeature();
   renderGenres();
+  renderRails();
+  // Прямая ссылка на фильм: страницу можно отрисовать только после загрузки базы
+  if (currentMovieId() !== null) renderMoviePage(currentMovieId());
 
   // Актёры и подборки грузим в фоне — не блокируют первую отрисовку
   Promise.allSettled([
@@ -113,6 +117,7 @@ async function loadData() {
     // а открытую модалку перерисуем с актёрами
     if (el("search").value.trim() || state.actor) render();
     if (!el("movieModal").hidden && state.currentModal) openModal(state.currentModal);
+    if (document.body.dataset.view === "movie") renderMoviePage(currentMovieId());
   });
 }
 
@@ -467,6 +472,49 @@ function renderCollections() {
   bindImageFallbacks(wrap);
 }
 
+/* ── Ленты «На слуху сейчас» и «Скоро в кино» ──────── */
+
+function fmtDateRu(iso) {
+  const t = Date.parse(iso || "");
+  if (isNaN(t)) return "";
+  return new Date(t).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+}
+
+function railCardHtml(m, opts = {}) {
+  const sub = opts.date && m.release_date
+    ? `В КИНО ${fmtDateRu(m.release_date).toUpperCase()}`
+    : m.rating
+      ? `★ ${Number(m.rating).toFixed(1)}`
+      : escapeHtml(m.year || "");
+  return `
+  <div class="rail-card" data-id="${m.id}" title="${escapeAttr(m.title || "")}">
+    <div class="poster">
+      <img alt="${escapeAttr(m.title || "")}" loading="lazy"
+           src="${escapeAttr(m.poster || `posters/${m.id}.jpg`)}" ${m.poster_fallback ? `data-fallback="${escapeAttr(m.poster_fallback)}"` : ""}>
+    </div>
+    <div class="movie-title">${escapeHtml(m.title || "Без названия")}</div>
+    <div class="movie-sub">${sub}</div>
+  </div>`;
+}
+
+function renderRails() {
+  const now = (state.lists.now_playing || []).map(movieById).filter(Boolean);
+  const up = (state.lists.upcoming || []).map(movieById).filter(Boolean);
+
+  const nowRow = el("nowRow");
+  if (nowRow) {
+    nowRow.innerHTML = now.map((m) => railCardHtml(m)).join("");
+    el("nowPlaying").hidden = !now.length;
+    el("nowEmpty").hidden = !!now.length;
+  }
+  const upRow = el("upRow");
+  if (upRow) {
+    upRow.innerHTML = up.map((m) => railCardHtml(m, { date: true })).join("");
+    el("upcoming").hidden = !up.length;
+    el("upEmpty").hidden = !!up.length;
+  }
+}
+
 /* ── «Твой список» ─────────────────────────────────── */
 
 function renderSaved() {
@@ -666,10 +714,273 @@ function closeModal() {
   document.body.style.overflow = "";
 }
 
+/* ── Страница фильма (отдельный «экран» по адресу #movie/{id}) ── */
+
+function currentMovieId() {
+  const mm = location.hash.match(/^#movie\/(\d+)$/);
+  return mm ? Number(mm[1]) : null;
+}
+
+function openMovie(id) {
+  // Фильм из базы открывается отдельной страницей; адрес меняется,
+  // поэтому кнопка «назад» в браузере возвращает к каталогу
+  if (movieById(id)) location.hash = `movie/${id}`;
+}
+
+function probeImage(url, onOk, onFail) {
+  const im = new Image();
+  im.onload = () => onOk(url);
+  im.onerror = () => onFail && onFail();
+  im.src = url;
+}
+
+function setMovieHeroBackdrop(m) {
+  const art = el("moviePage").querySelector(".hero-art");
+  if (!art) return;
+  const apply = (url) => {
+    if (art.isConnected) {
+      art.src = url;
+      art.hidden = false;
+    }
+  };
+  const chain = [];
+  // Кадр Кинопоиска (Яндекс.CDN — из РФ без VPN), затем TMDB-кадр через прокси
+  if (m.frame) chain.push(m.frame);
+  if (m.backdrop) {
+    const p = `image.tmdb.org/t/p/w1280${m.backdrop}`;
+    chain.push(`${PROXY_IMG}${p}`, `${PROXY_IMG_2}${p}`, `https://${p}`);
+  }
+  const next = () => {
+    const url = chain.shift();
+    if (url) probeImage(url, apply, next);
+  };
+  next();
+}
+
+function moviePageHtml(m) {
+  const { local, fallback } = posterSources(m);
+  const isFav = state.favorites.includes(m.id);
+  const genreChips = (m.genres || [])
+    .map((gid) => (state.genres.find((g) => g.id === gid) || {}).name)
+    .filter(Boolean)
+    .map((name) => `<span class="chip">${escapeHtml(name)}</span>`)
+    .join("");
+
+  const ratings = [
+    m.rating ? `<span class="rating-pill"><span class="label">TMDB</span>⭐ ${Number(m.rating).toFixed(1)}</span>` : "",
+    m.kp_rating ? `<span class="rating-pill"><span class="label">Кинопоиск</span>⭐ ${Number(m.kp_rating).toFixed(1)}</span>` : "",
+    m.runtime ? `<span class="rating-pill"><span class="label">Время</span>${runtimeLabel(m.runtime)}</span>` : "",
+  ].filter(Boolean).join("");
+
+  const cast = (state.cast && state.cast[String(m.id)]) || [];
+  const castHtml = cast.length
+    ? `<div class="cast-section"><h3>В главных ролях</h3><div class="cast-row">${cast
+        .map(
+          (c) => `
+      <div class="cast-card" data-actor="${escapeAttr(c.name)}" title="Фильмы актёра">
+        ${
+          c.photo
+            ? (() => {
+                const ps = personPhotoSources(c.photo);
+                return `<img alt="${escapeAttr(c.name)}" loading="lazy" src="${escapeAttr(ps.src)}" data-fallback="${escapeAttr(ps.fallback)}">`;
+              })()
+            : `<div class="cast-photo-empty">🎭</div>`
+        }
+        <div class="cast-name">${escapeHtml(c.name)}</div>
+        ${c.character ? `<div class="cast-role">${escapeHtml(c.character)}</div>` : ""}
+      </div>`
+        )
+        .join("")}</div></div>`
+    : "";
+
+  const facts = (m.facts || []).slice(0, 5);
+  const factsHtml = facts.length
+    ? `<div class="facts-section"><h3>💡 Интересные факты</h3><ul>${facts
+        .map((f) => `<li>${escapeHtml(f)}</li>`)
+        .join("")}</ul></div>`
+    : "";
+
+  const similar = (m.similar || []).map(movieById).filter(Boolean).slice(0, 10);
+  const similarHtml = similar.length
+    ? `<div class="similar-section"><h3>🎯 Похожее</h3><div class="similar-row">${similar
+        .map(
+          (s) => `
+      <div class="similar-card" data-id="${s.id}">
+        <img alt="${escapeAttr(s.title || "")}" loading="lazy" src="${escapeAttr(s.poster || `posters/${s.id}.jpg`)}">
+        <span>${escapeHtml(s.title || "")}</span>
+      </div>`
+        )
+        .join("")}</div></div>`
+    : "";
+
+  const premiere = m.release_date
+    ? `ПРЕМЬЕРА ${escapeHtml(fmtDateRu(m.release_date).toUpperCase())}`
+    : m.year
+      ? escapeHtml(m.year)
+      : "ФИЛЬМ";
+
+  return `
+  <div class="movie-hero">
+    <img class="hero-art" alt="" hidden>
+    <div class="hero-shade"></div>
+    <button class="movie-back" id="movieBack" title="Назад">← Каталог</button>
+    <div class="wrap hero-inner">
+      ${
+        local || fallback
+          ? `<img class="hero-thumb" alt="${escapeAttr(m.title || "")}" src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>`
+          : `<div class="hero-thumb poster-empty">Нет постера</div>`
+      }
+      <div class="hero-text">
+        <div class="tag">${premiere}</div>
+        <h1>${escapeHtml(m.title || "Без названия")}</h1>
+        <p class="movie-sub">${escapeHtml([m.original_title, (m.countries || []).join(", ")].filter(Boolean).join(" • "))}</p>
+        <div class="ratings">${ratings}</div>
+        <div class="chips">${genreChips}</div>
+        <div class="movie-actions">
+          <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" title="В избранное">${isFav ? "♥ В избранном" : "＋ В избранное"}</button>
+          ${m.trailer ? `<button class="primary trailer-btn" data-trailer="${escapeAttr(m.trailer)}">▶ Трейлер</button>` : ""}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="wrap movie-page-body">
+    <div class="overview-block"><p class="overview">${escapeHtml(m.description || "Описание отсутствует.")}</p></div>
+    ${factsHtml}
+    ${castHtml}
+    ${similarHtml}
+  </div>`;
+}
+
+function renderMoviePage(id) {
+  const m = movieById(id);
+  if (!m) {
+    if (state.movies.length) location.hash = ""; // фильма нет в базе
+    return; // данные ещё не догрузились — роутер вызовется снова после загрузки
+  }
+  const page = el("moviePage");
+  const same = document.body.dataset.view === "movie" && page.dataset.movieId === String(id);
+  document.body.dataset.view = "movie";
+  state.currentModal = id;
+  page.innerHTML = moviePageHtml(m);
+  page.dataset.movieId = String(id);
+  page.hidden = false;
+  document.querySelector("main").style.display = "none";
+  document.title = `${m.title || "Фильм"} — Что посмотреть?`;
+  if (!same) {
+    setMovieHeroBackdrop(m);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+}
+
+function exitMoviePage() {
+  document.body.dataset.view = "";
+  el("moviePage").hidden = true;
+  el("moviePage").innerHTML = "";
+  document.querySelector("main").style.display = "";
+  document.title = "Что посмотреть?";
+}
+
+function updateNavActive() {
+  const h = (location.hash || "#home").replace("#", "");
+  const section = h.startsWith("movie/") ? "" : h || "home";
+  document.querySelectorAll(".navlinks a, .tabbar a").forEach((a) => {
+    a.classList.toggle("active", a.getAttribute("href") === `#${section}`);
+  });
+}
+
+function goBackFromMovie() {
+  if (history.length > 1) {
+    history.back();
+    // Если назад идти некуда (страницу открыли по прямой ссылке) — уходим сами
+    setTimeout(() => {
+      if (currentMovieId() !== null) location.hash = "";
+    }, 400);
+  } else {
+    location.hash = "";
+  }
+}
+
+/* Роутер: #movie/{id} — страница фильма, #секция — прыжок по главной */
+function route() {
+  const id = currentMovieId();
+  const wasMovie = document.body.dataset.view === "movie";
+  if (id !== null) {
+    if (!wasMovie) state.homeScroll = window.scrollY;
+    renderMoviePage(id);
+    return;
+  }
+  if (wasMovie) exitMoviePage();
+  updateNavActive();
+  if (wasMovie) render(); // применить фильтры, изменённые внутри страницы фильма
+  const hash = location.hash;
+  if (hash && hash !== "#home") {
+    const target = document.querySelector(hash);
+    if (target) {
+      jumpTo(target);
+      return;
+    }
+  }
+  if (wasMovie && state.homeScroll) {
+    window.scrollTo({ top: state.homeScroll, behavior: "instant" });
+  } else {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+}
+
+/* Клик внутри страницы фильма (и модалки-запаски): избранное, трейлер,
+   актёр, похожий фильм, кнопка «Назад» */
+function bindMovieBodyActions(root) {
+  root.addEventListener("click", (e) => {
+    const back = e.target.closest("#movieBack");
+    if (back) {
+      goBackFromMovie();
+      return;
+    }
+    const fav = e.target.closest(".fav-btn");
+    if (fav) {
+      toggleFavorite(Number(fav.dataset.id));
+      return;
+    }
+    const trailer = e.target.closest(".trailer-btn");
+    if (trailer) {
+      const art = root.querySelector(".hero-art") || root.querySelector(".hero-poster");
+      if (art) {
+        const wrap = document.createElement("div");
+        wrap.className = "trailer-wrap";
+        wrap.innerHTML =
+          `<iframe src="https://www.youtube.com/embed/${escapeAttr(trailer.dataset.trailer)}?autoplay=1" ` +
+          `allow="autoplay; encrypted-media" allowfullscreen title="Трейлер"></iframe>`;
+        art.replaceWith(wrap);
+        trailer.remove();
+      }
+      return;
+    }
+    const actor = e.target.closest(".cast-card");
+    if (actor) {
+      state.actor = actor.dataset.actor;
+      el("search").value = "";
+      el("clearSearch").hidden = true;
+      if (root === el("moviePage")) {
+        location.hash = "#catalog"; // роутер вернёт на главную и применит фильтр
+      } else {
+        closeModal();
+        jumpTo(el("catalog"));
+        render();
+      }
+      return;
+    }
+    const similarCard = e.target.closest(".similar-card");
+    if (similarCard) {
+      if (root === el("moviePage")) location.hash = `movie/${similarCard.dataset.id}`;
+      else openMovie(Number(similarCard.dataset.id));
+    }
+  });
+}
+
 function openRandom() {
   const list = filteredList();
   if (!list.length) return;
-  openModal(list[Math.floor(Math.random() * list.length)].id);
+  openMovie(list[Math.floor(Math.random() * list.length)].id);
 }
 
 /* ── Запасные ссылки для картинок ──────────────────── */
@@ -702,6 +1013,9 @@ function bindEvents() {
   bindImageFallbacks(el("savedGrid"));
   bindImageFallbacks(el("feature"));
   bindImageFallbacks(el("modalBody"));
+  bindImageFallbacks(el("moviePage"));
+  bindImageFallbacks(el("nowRow"));
+  bindImageFallbacks(el("upRow"));
 
   for (const id of ["search", "genreExclude", "yearFrom", "yearTo", "ratingMin", "sortSelect"]) {
     const node = el(id);
@@ -744,15 +1058,7 @@ function bindEvents() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   });
 
-  // Меню: мгновенный прыжок к секции + активная ссылка
-  document.querySelectorAll(".navlinks a").forEach((a) => {
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      document.querySelectorAll(".navlinks a").forEach((x) => x.classList.toggle("active", x === a));
-      jumpTo(document.querySelector(a.getAttribute("href")));
-    });
-  });
-
+  // Меню: переходы по хешу обрабатывает роутер (route на hashchange)
   // Клик по карточке / сердечку / фич-блоку (делегирование на документе,
   // работает и для каталога, и для «Твоего списка»)
   document.addEventListener("click", (e) => {
@@ -764,7 +1070,7 @@ function bindEvents() {
     }
     const featOpen = e.target.closest("#feature [data-open]");
     if (featOpen) {
-      openModal(Number(featOpen.dataset.open));
+      openMovie(Number(featOpen.dataset.open));
       return;
     }
     const featHeart = e.target.closest("#feature [data-heart]");
@@ -774,7 +1080,12 @@ function bindEvents() {
     }
     const collCard = e.target.closest(".coll-card");
     if (collCard) {
-      openModal(Number(collCard.dataset.id));
+      openMovie(Number(collCard.dataset.id));
+      return;
+    }
+    const railCard = e.target.closest(".rail-card");
+    if (railCard) {
+      openMovie(Number(railCard.dataset.id));
       return;
     }
     const collAll = e.target.closest("[data-collall]");
@@ -793,45 +1104,11 @@ function bindEvents() {
       return;
     }
     const movie = e.target.closest(".movie");
-    if (movie) openModal(Number(movie.dataset.id));
+    if (movie) openMovie(Number(movie.dataset.id));
   });
 
-  el("modalBody").addEventListener("click", (e) => {
-    const fav = e.target.closest(".fav-btn");
-    if (fav) {
-      toggleFavorite(Number(fav.dataset.id));
-      return;
-    }
-    const trailer = e.target.closest(".trailer-btn");
-    if (trailer) {
-      const poster = el("modalBody").querySelector(".hero-poster");
-      if (poster) {
-        const wrap = document.createElement("div");
-        wrap.className = "trailer-wrap";
-        wrap.innerHTML =
-          `<iframe src="https://www.youtube.com/embed/${escapeAttr(trailer.dataset.trailer)}?autoplay=1" ` +
-          `allow="autoplay; encrypted-media" allowfullscreen title="Трейлер"></iframe>`;
-        poster.replaceWith(wrap);
-        trailer.remove();
-      }
-      return;
-    }
-    const actor = e.target.closest(".cast-card");
-    if (actor) {
-      state.actor = actor.dataset.actor;
-      el("search").value = "";
-      el("clearSearch").hidden = true;
-      closeModal();
-      jumpTo(el("catalog"));
-      render();
-      return;
-    }
-    const similarCard = e.target.closest(".similar-card");
-    if (similarCard) {
-      openModal(Number(similarCard.dataset.id));
-      el("modalBody").scrollTop = 0;
-    }
-  });
+  bindMovieBodyActions(el("modalBody"));
+  bindMovieBodyActions(el("moviePage"));
 
   el("modalClose").addEventListener("click", closeModal);
   el("movieModal").addEventListener("click", (e) => {
@@ -854,5 +1131,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Скелетоны на время загрузки данных
   el("grid").innerHTML = Array.from({ length: 12 }, () => '<div class="skeleton"></div>').join("");
   bindEvents();
+  window.addEventListener("hashchange", route);
+  route();
   loadData();
 });

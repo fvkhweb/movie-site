@@ -216,3 +216,53 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
   .movie-body,.facts-section,.cast-section,.similar-section{padding-left:16px;padding-right:16px}
   .foot{flex-direction:column}
 }
+
+/* ── Ленты «На слуху сейчас» и «Скоро в кино» ── */
+#nowPlaying,#upcoming{scroll-margin-top:96px}
+.rail{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
+.rail-card{flex:none;width:150px;cursor:pointer}
+.rail-card .poster{transition:border-color .2s}
+.rail-card:hover .poster{border-color:var(--blue)}
+
+/* ── Страница фильма (#movie/{id}) ── */
+body[data-view="movie"] main{display:none}
+.movie-hero{position:relative;min-height:420px;display:flex;align-items:flex-end;overflow:hidden;background:linear-gradient(135deg,#141a26,#0d1119)}
+.hero-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.8)}
+.hero-shade{position:absolute;inset:0;background:linear-gradient(0deg,#090b0f 6%,rgba(9,11,15,.6) 42%,rgba(9,11,15,.15))}
+.movie-back{position:absolute;z-index:3;left:18px;top:18px;height:38px;padding:0 14px;border-radius:100px;border:1px solid #ffffff30;background:rgba(9,11,15,.65);color:#fff;font-size:12px;font-weight:700;backdrop-filter:blur(6px);cursor:pointer}
+.movie-back:hover{border-color:var(--blue)}
+.hero-inner{position:relative;z-index:2;display:flex;gap:28px;align-items:flex-end;padding:0 0 34px;width:min(1320px,calc(100% - 64px));margin:auto}
+.hero-thumb{flex:none;width:210px;aspect-ratio:2/3;object-fit:cover;object-position:top;border-radius:12px;border:1px solid #ffffff20;box-shadow:0 18px 50px rgba(0,0,0,.55);background:var(--panel2)}
+.hero-thumb.poster-empty{display:grid;place-items:center;color:var(--muted);font-size:12px}
+.hero-text{min-width:0;padding-bottom:4px}
+.hero-text h1{font:700 clamp(26px,4vw,44px)/1.1 Unbounded;letter-spacing:-2px;margin:10px 0 8px}
+.hero-text .movie-sub{font-size:12px;color:#aab3c0}
+.hero-text .ratings{margin:14px 0 10px}
+.hero-text .chips{padding:0 0 2px;flex-wrap:wrap;overflow:visible;mask-image:none;-webkit-mask-image:none}
+.hero-text .movie-actions{margin:6px 0 0}
+.movie-hero .trailer-wrap{position:absolute;inset:0;z-index:1;min-height:0;grid-column:auto}
+.movie-hero .trailer-wrap iframe{position:absolute;inset:0;width:100%;height:100%;min-height:0;border:0}
+.movie-page-body{padding-bottom:80px}
+.movie-page-body .facts-section,.movie-page-body .cast-section,.movie-page-body .similar-section{padding:26px 0 0}
+.movie-page-body .overview-block{margin-top:30px;max-width:800px}
+
+/* ── Мобильная нижняя навигация ── */
+.tabbar{display:none}
+
+@media(max-width:650px){
+  .tabbar{display:flex;position:fixed;z-index:40;left:0;right:0;bottom:0;height:calc(54px + env(safe-area-inset-bottom));padding:0 6px env(safe-area-inset-bottom);background:rgba(9,11,15,.94);backdrop-filter:blur(16px);border-top:1px solid var(--line)}
+  .tabbar a{flex:1;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;font-size:9.5px;color:#8b95a6;letter-spacing:.3px}
+  .tabbar a span{font-size:17px;line-height:1}
+  .tabbar a.active{color:var(--blue2)}
+  main{padding-bottom:130px}
+  /* Страница фильма на мобильном: вертикальная раскладка, кадр во всю ширину */
+  .movie-hero{min-height:310px}
+  .movie-back{left:12px;top:12px;height:34px;padding:0 12px}
+  .hero-inner{gap:16px;padding:0 0 22px;width:calc(100% - 32px)}
+  .hero-thumb{width:104px;border-radius:9px}
+  .hero-text h1{font-size:20px;letter-spacing:-1px;margin:8px 0 6px}
+  .movie-actions{flex-wrap:wrap;gap:8px}
+  .movie-page-body{padding-bottom:50px}
+  .rail-card{width:118px}
+  .rail{gap:12px}
+}

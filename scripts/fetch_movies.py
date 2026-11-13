@@ -39,6 +39,8 @@ KPU_STATE = {"idx": 0, "exhausted": set(), "premium_logged": set()}
 POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "20"))
 TOP_PAGES = int(os.environ.get("TOP_PAGES", "20"))
 GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "6"))
+NOW_PAGES = int(os.environ.get("NOW_PAGES", "4"))    # «сейчас в кино»
+UP_PAGES = int(os.environ.get("UP_PAGES", "4"))      # «скоро выйдут»
 API_WORKERS = int(os.environ.get("API_WORKERS", "8"))
 DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "8"))
 TEST_LIMIT = int(os.environ.get("LIMIT_MOVIES", "0"))  # >0 — только для локального теста
@@ -117,6 +119,26 @@ def collect_candidates():
         "top_rated": order_top,
         "by_genre": by_genre,
     }
+
+    # «На слуху сейчас» и «Скоро» — отдельные потоки TMDB: премьеры в кинотеатрах
+    # и анонсы. Это основа главной страницы сервиса.
+    now_ids, up_ids = [], []
+    for endpoint, ids, pages, label in (
+        ("/movie/now_playing", now_ids, NOW_PAGES, "сейчас в кино"),
+        ("/movie/upcoming", up_ids, UP_PAGES, "скоро"),
+    ):
+        for page in range(1, pages + 1):
+            data = tmdb_get(endpoint, {"page": page, "include_adult": "false"})
+            if not data:
+                break
+            for m in data.get("results", []):
+                m["_popularity"] = m.get("popularity", 0)
+                found.setdefault(m["id"], m)
+                ids.append(m["id"])
+            print(f"{label}: страница {page}, всего {len(found)}")
+    lists["now_playing"] = now_ids
+    lists["upcoming"] = up_ids
+
     return list(found.values()), genres, lists
 
 
@@ -390,6 +412,15 @@ def download_poster(movie_id, poster_path):
     return ""
 
 
+def load_old(name):
+    """Вчерашние данные из репозитория (для накопления базы)."""
+    try:
+        with open(f"data/{name}.json", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 def build_catalog():
     candidates, genres, lists = collect_candidates()
 
@@ -403,12 +434,43 @@ def build_catalog():
             if done % 100 == 0:
                 print(f"детали: {done}/{len(candidates)}")
 
-    # Кинопоиск — обогащение двух источников по убыванию популярности:
+    # ── Накопление базы: свежие данные поверх вчерашних ──
+    # Фильм, попавший в каталог хоть раз, остаётся в базе навсегда.
+    # Данные TMDB перекрываются свежими, а редкие Кинопоиск-поля
+    # (рейтинг, факты, кадр) сохраняются — дневные квоты тратятся
+    # только на фильмы, у которых их ещё нет.
+    old_movies = {m["id"]: m for m in (load_old("movies") or [])}
+    old_cast = load_old("cast") or {}
+    KP_FIELDS = ("kp_rating", "facts", "frame", "poster", "poster_fallback")
+
+    for m in movies_raw:
+        o = old_movies.get(m["id"])
+        if not o:
+            continue
+        m["release_date"] = m.get("release_date") or o.get("release_date") or ""
+        # Описание Кинопоиска (если когда-то получили) лучше заводского обзора TMDB
+        if o.get("description") and o.get("kp_rating"):
+            m["description"] = o["description"]
+        for k in KP_FIELDS:
+            if o.get(k) and not m.get(k):
+                m[k] = o[k]
+
+    # Архив: фильмы из вчерашней базы, которые больше не входят в списки TMDB
+    current_ids = {m["id"] for m in movies_raw}
+    archived = 0
+    for oid, o in old_movies.items():
+        if oid not in current_ids:
+            movies_raw.append(o)
+            archived += 1
+    print(f"архив: {archived} фильмов перенесены из вчерашней базы")
+
+    # Кинопоиск — обогащение двух источников по убыванию популярности,
+    # только для фильмов без рейтинга/фактов:
     # сначала kinopoisk.dev, затем Kinopoisk Unofficial (факты + резерв).
-    movies_raw.sort(key=lambda m: m["popularity"], reverse=True)
+    movies_raw.sort(key=lambda m: m.get("popularity") or 0, reverse=True)
     kp_ids = {}  # tmdb_id -> id Кинопоиска (для кадров)
-    for m in movies_raw[:KP_MAX_MOVIES]:
-        kp = get_kp_data(m["title"], m["year"])
+    for m in [m for m in movies_raw if not m.get("kp_rating")][:KP_MAX_MOVIES]:
+        kp = get_kp_data(m.get("title"), m.get("year"))
         if kp:
             if kp.get("kp_id"):
                 kp_ids[m["id"]] = kp["kp_id"]
@@ -420,8 +482,8 @@ def build_catalog():
                 m["poster_fallback"] = kp["poster"]
         time.sleep(0.3)
 
-    for m in movies_raw[KP_MAX_MOVIES:KP_MAX_MOVIES + UNOFFICIAL_MAX_MOVIES]:
-        kp = get_kp_unofficial(m["title"], m["year"])
+    for m in [m for m in movies_raw if not m.get("facts")][:UNOFFICIAL_MAX_MOVIES]:
+        kp = get_kp_unofficial(m.get("title"), m.get("year"))
         if kp:
             if kp.get("film_id"):
                 kp_ids[m["id"]] = kp["film_id"]
@@ -435,18 +497,26 @@ def build_catalog():
                 m["facts"] = kp["facts"]
         time.sleep(0.3)
 
-    # Кадры из фильмов (Яндекс.CDN — работают из РФ без VPN)
+    # Кадры из фильмов (Яндекс.CDN — работают из РФ без VPN) —
+    # только для фильмов, у которых кадра ещё нет и есть id Кинопоиска
     for m in movies_raw:
-        frame = get_kp_frame(kp_ids.get(m["id"]))
+        if m.get("frame") or not kp_ids.get(m["id"]):
+            continue
+        frame = get_kp_frame(kp_ids[m["id"]])
         if frame:
             m["frame"] = frame
         time.sleep(0.2)
 
-    # Постеры (параллельно)
+    # Постеры (параллельно) — докачиваем только отсутствующие файлы
     def job(m):
-        m["poster"] = download_poster(m["id"], m["poster_path"])
+        local_path = f"{POSTERS_DIR}/{m['id']}.jpg"
+        if not os.path.exists(local_path):
+            m["poster"] = download_poster(m["id"], m.get("poster_path") or "")
+        else:
+            m["poster"] = local_path
         if not m.get("poster_fallback"):
-            m["poster_fallback"] = IMG_MIRROR + m["poster_path"] if m["poster_path"] else ""
+            path = m.get("poster_path") or ""
+            m["poster_fallback"] = IMG_MIRROR + path if path else ""
         return m
 
     with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as ex:
@@ -455,15 +525,18 @@ def build_catalog():
 
     # cast.json и индекс актёров собираем ДО чистки записей
     cast_map = {str(m["id"]): m.get("cast", []) for m in movies}
+    # Актёры архивных фильмов — из вчерашнего cast.json
+    cast_map.update(old_cast)
 
     # Индекс актёров для поиска по имени и страниц актёра
     people = {}
-    for m in movies:
-        for c in m.get("cast", []):
+    for mid_s, cast in cast_map.items():
+        for c in cast:
             key = str(c.get("id") or c["name"])
             person = people.setdefault(key, {"id": c.get("id") or 0, "name": c["name"], "photo": c["photo"], "movies": []})
-            if m["id"] not in person["movies"]:
-                person["movies"].append(m["id"])
+            movie_id = int(mid_s) if str(mid_s).isdigit() else mid_s
+            if movie_id not in person["movies"]:
+                person["movies"].append(movie_id)
             if c["photo"] and not person["photo"]:
                 person["photo"] = c["photo"]
 
@@ -471,7 +544,8 @@ def build_catalog():
     for m in movies:
         m.pop("cast", None)
         m.pop("poster_path", None)
-        m.pop("popularity", None)
+        # popularity и release_date оставляем: нужны для сортировки
+        # «Сначала популярные» и точной сортировки по дате выхода
         if not m.get("kp_rating"):
             m.pop("kp_rating", None)
         if not m.get("poster_fallback"):
@@ -486,6 +560,8 @@ def build_catalog():
             m.pop("backdrop", None)
         if not m.get("frame"):
             m.pop("frame", None)
+        if not m.get("release_date"):
+            m.pop("release_date", None)
 
     save("movies", movies)
     save("genres", genres)

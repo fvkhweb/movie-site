@@ -6,7 +6,7 @@
   <meta name="description" content="Каталог фильмов: жанры, годы, рейтинг, актёры, избранное. Работает без VPN.">
   <title>Что посмотреть?</title>
   <link rel="stylesheet" href="fonts/fonts.css?v=5">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <header>
@@ -85,6 +85,18 @@
       <div id="emptyState" class="empty" hidden>Ничего не найдено. Попробуй изменить запрос или фильтр.</div>
     </section>
 
+    <section class="catalog-section" id="nowPlaying">
+      <div class="section-head"><div class="section-title">НА СЛУХУ СЕЙЧАС</div><div class="section-meta">IN THEATERS</div></div>
+      <div class="rail" id="nowRow"></div>
+      <div id="nowEmpty" class="empty" hidden>Список премьер подтянется при следующем обновлении базы.</div>
+    </section>
+
+    <section class="catalog-section" id="upcoming">
+      <div class="section-head"><div class="section-title">СКОРО В КИНО</div><div class="section-meta">COMING SOON</div></div>
+      <div class="rail" id="upRow"></div>
+      <div id="upEmpty" class="empty" hidden>Список анонсов подтянется при следующем обновлении базы.</div>
+    </section>
+
     <section id="genres" class="catalog-section">
       <div class="section-head"><div class="section-title">ВЫБИРАЙ ПО НАСТРОЕНИЮ</div><div class="section-meta">GENRE INDEX</div></div>
       <div class="genre-strip" id="genreStrip"></div>
@@ -118,6 +130,16 @@
     </div>
   </div>
 
-  <script src="app.js?v=9"></script>
+  <section id="moviePage" hidden></section>
+
+  <nav class="tabbar" aria-label="Навигация">
+    <a href="#home" data-tab="home"><span>⌂</span>Главная</a>
+    <a href="#catalog" data-tab="catalog"><span>▤</span>Каталог</a>
+    <a href="#genres" data-tab="genres"><span>◈</span>Жанры</a>
+    <a href="#collections" data-tab="collections"><span>✦</span>Подборки</a>
+    <a href="#saved" data-tab="saved"><span>♡</span>Избранное</a>
+  </nav>
+
+  <script src="app.js?v=10"></script>
 </body>
 </html>
