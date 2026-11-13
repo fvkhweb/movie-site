@@ -140,6 +140,7 @@ def enrich_movie(m):
         "title": details.get("title") or m.get("title", ""),
         "original_title": details.get("original_title") or "",
         "year": release[:4],
+        "release_date": release,
         "rating": round(details.get("vote_average") or 0, 1),
         "popularity": round(m.get("_popularity", 0), 1),
         "runtime": details.get("runtime") or 0,

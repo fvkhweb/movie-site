@@ -230,10 +230,17 @@ function filteredList() {
 
   const byId = (a, b, dir) => dir * String(a ?? "").localeCompare(String(b ?? ""), "ru");
   const num = (v) => Number(v) || 0;
+  // Сортировка по новизне учитывает не только год, но и месяц и день выхода
+  // (release_date вида "2026-03-14"). Если точной даты нет, берём год как "1 января".
+  const releaseTS = (m) => {
+    const d = m.release_date || (m.year ? `${m.year}-01-01` : "");
+    const t = Date.parse(d);
+    return isNaN(t) ? 0 : t;
+  };
   if (sortType === "rating_desc") list.sort((a, b) => num(b.rating) - num(a.rating));
   else if (sortType === "kp_rating_desc") list.sort((a, b) => num(b.kp_rating) - num(a.kp_rating));
-  else if (sortType === "year_desc") list.sort((a, b) => num(b.year) - num(a.year));
-  else if (sortType === "year_asc") list.sort((a, b) => num(a.year) - num(b.year));
+  else if (sortType === "year_desc") list.sort((a, b) => releaseTS(b) - releaseTS(a) || num(b.year) - num(a.year));
+  else if (sortType === "year_asc") list.sort((a, b) => releaseTS(a) - releaseTS(b) || num(a.year) - num(b.year));
   else if (sortType === "title_asc") list.sort((a, b) => byId(a.title, b.title, 1));
   else if (sortType === "runtime_desc") list.sort((a, b) => num(b.runtime) - num(a.runtime));
   else list.sort((a, b) => num(b.popularity) - num(a.popularity));

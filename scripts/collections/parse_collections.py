@@ -44,6 +44,8 @@ def extract_films(html):
     # Идём по блокам постеров: внутри блока берём alt и slug
     for m in TITLE_YEAR_RE.finditer(html):
         title, year = m.group(1).strip(), int(m.group(2))
+        # Сохранённые страницы Letterboxd пишут alt как «Poster for Title (Year)»
+        title = re.sub(r"^Poster for\s+", "", title, flags=re.I)
         # slug ищем в ближайших 1200 символах до img (блок постера)
         block = html[max(0, m.start() - 1200):m.start()]
         slugs = SLUG_RE.findall(block)
