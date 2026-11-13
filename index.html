@@ -5,8 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Каталог фильмов: жанры, годы, рейтинг, актёры, избранное. Работает без VPN.">
   <title>Что посмотреть?</title>
+  <link rel="preconnect" href="https://wsrv.nl">
+  <link rel="preconnect" href="https://images.weserv.nl">
+  <link rel="dns-prefetch" href="https://image.tmdb.org">
   <link rel="stylesheet" href="fonts/fonts.css?v=5">
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
   <header>
@@ -102,11 +105,6 @@
       <div class="genre-strip" id="genreStrip"></div>
     </section>
 
-    <section id="collections" class="catalog-section" hidden>
-      <div class="section-head"><div class="section-title">ПОДБОРКИ</div><div class="section-meta">COLLECTIONS</div></div>
-      <div id="collectionsList"></div>
-    </section>
-
     <section class="catalog-section" id="saved">
       <div class="section-head"><div class="section-title">ТВОЙ СПИСОК</div><div class="section-meta">BOOKMARKS / SAVED</div></div>
       <div class="grid" id="savedGrid"></div>
@@ -132,6 +130,8 @@
 
   <section id="moviePage" hidden></section>
 
+  <section id="collectionsPage" hidden></section>
+
   <nav class="tabbar" aria-label="Навигация">
     <a href="#home" data-tab="home"><span>⌂</span>Главная</a>
     <a href="#catalog" data-tab="catalog"><span>▤</span>Каталог</a>
@@ -140,7 +140,7 @@
     <a href="#saved" data-tab="saved"><span>♡</span>Избранное</a>
   </nav>
 
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=14"></script>
 
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
