@@ -1,5 +1,5 @@
 import html as html_mod
-import os, json, time, re, requests
+import os, json, time, re, datetime, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
@@ -39,7 +39,7 @@ KPU_STATE = {"idx": 0, "exhausted": set(), "premium_logged": set()}
 POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "20"))
 TOP_PAGES = int(os.environ.get("TOP_PAGES", "20"))
 GENRE_PAGES = int(os.environ.get("GENRE_PAGES", "6"))
-NOW_PAGES = int(os.environ.get("NOW_PAGES", "4"))    # «сейчас в кино»
+TRENDS_PAGES = int(os.environ.get("TRENDS_PAGES", "4"))  # «на слуху» — тренды недели
 UP_PAGES = int(os.environ.get("UP_PAGES", "4"))      # «скоро выйдут»
 API_WORKERS = int(os.environ.get("API_WORKERS", "8"))
 DOWNLOAD_WORKERS = int(os.environ.get("DOWNLOAD_WORKERS", "8"))
@@ -95,6 +95,38 @@ def collect_candidates():
                 order_top.append(m["id"])
         print(f"top_rated: страница {page}, всего {len(found)}")
 
+    # «На слуху сейчас» и «Скоро в кино» — тренды недели и анонсы TMDB.
+    # Тянем их ПЕРВЫМИ, до тяжёлого обхода жанров: если API начнёт
+    # лимитировать, самые видимые панели главной не останутся пустыми.
+    # Тренды ≠ популярное: «popular» — всевременная известность,
+    # «trending/week» — то, о чём реально говорят на этой неделе.
+    now_ids, up_ids = [], []
+    today = datetime.date.today().isoformat()
+    for page in range(1, TRENDS_PAGES + 1):
+        data = tmdb_get("/trending/movie/week", {"page": page})
+        if not data:
+            break
+        for m in data.get("results", []):
+            m["_popularity"] = m.get("popularity", 0)
+            found.setdefault(m["id"], m)
+            now_ids.append(m["id"])
+        print(f"тренды недели: страница {page}, всего {len(found)}")
+
+    for page in range(1, UP_PAGES + 1):
+        data = tmdb_get("/movie/upcoming", {"page": page, "include_adult": "false"})
+        if not data:
+            break
+        for m in data.get("results", []):
+            # Только ещё не вышедшие: TMDB держит в списке и залёжавшиеся даты
+            if (m.get("release_date") or "") < today:
+                continue
+            m["_popularity"] = m.get("popularity", 0)
+            found.setdefault(m["id"], m)
+            up_ids.append(m["id"])
+        print(f"скоро: страница {page}, всего {len(found)}")
+    # Ближайшие премьеры — первыми
+    up_ids.sort(key=lambda mid: (found[mid].get("release_date") or "9999-99-99"))
+
     genre_list = tmdb_get("/genre/movie/list") or {}
     genres = genre_list.get("genres", [])
     by_genre = {}
@@ -118,26 +150,9 @@ def collect_candidates():
         "popular": order_popular,
         "top_rated": order_top,
         "by_genre": by_genre,
+        "now_playing": now_ids,  # тренды недели («на слуху сейчас»)
+        "upcoming": up_ids,
     }
-
-    # «На слуху сейчас» и «Скоро» — отдельные потоки TMDB: премьеры в кинотеатрах
-    # и анонсы. Это основа главной страницы сервиса.
-    now_ids, up_ids = [], []
-    for endpoint, ids, pages, label in (
-        ("/movie/now_playing", now_ids, NOW_PAGES, "сейчас в кино"),
-        ("/movie/upcoming", up_ids, UP_PAGES, "скоро"),
-    ):
-        for page in range(1, pages + 1):
-            data = tmdb_get(endpoint, {"page": page, "include_adult": "false"})
-            if not data:
-                break
-            for m in data.get("results", []):
-                m["_popularity"] = m.get("popularity", 0)
-                found.setdefault(m["id"], m)
-                ids.append(m["id"])
-            print(f"{label}: страница {page}, всего {len(found)}")
-    lists["now_playing"] = now_ids
-    lists["upcoming"] = up_ids
 
     return list(found.values()), genres, lists
 
@@ -423,6 +438,14 @@ def load_old(name):
 
 def build_catalog():
     candidates, genres, lists = collect_candidates()
+
+    # Если тренды/анонсы не скачались (сбой или лимит TMDB) — оставляем
+    # вчерашние списки, чтобы панели главной не превращались в пустышки
+    old_lists = load_old("lists") or {}
+    for key in ("now_playing", "upcoming"):
+        if not lists.get(key) and old_lists.get(key):
+            lists[key] = old_lists[key]
+            print(f"{key}: пусто, взято из вчерашнего списка ({len(lists[key])})")
 
     movies_raw = []
     with ThreadPoolExecutor(max_workers=API_WORKERS) as ex:

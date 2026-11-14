@@ -219,7 +219,8 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 
 /* ── Ленты «На слуху сейчас» и «Скоро в кино» ── */
 #nowPlaying,#upcoming{scroll-margin-top:96px}
-.rail{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
+.rail{display:flex;gap:16px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
 .rail-card{flex:none;width:150px;cursor:pointer}
 .rail-card .poster{transition:border-color .2s}
 .rail-card:hover .poster{border-color:var(--blue)}

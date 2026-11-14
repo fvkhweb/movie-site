@@ -529,8 +529,14 @@ function railCardHtml(m, opts = {}) {
 }
 
 function renderRails() {
+  const today = new Date().toISOString().slice(0, 10);
   const now = (state.lists.now_playing || []).map(movieById).filter(Boolean);
-  const up = (state.lists.upcoming || []).map(movieById).filter(Boolean);
+  // «Скоро в кино» — только невышедшие, ближайшие первыми;
+  // страховка от залежавшихся дат в данных
+  const up = (state.lists.upcoming || [])
+    .map(movieById)
+    .filter((m) => m.release_date && m.release_date.slice(0, 10) >= today)
+    .sort((a, b) => a.release_date.localeCompare(b.release_date));
 
   const nowRow = el("nowRow");
   if (nowRow) {
@@ -870,11 +876,12 @@ function moviePageHtml(m) {
         .join("")}</div></div>`
     : "";
 
-  const premiere = m.release_date
+  // Плашка премьеры — только у ещё не вышедших фильмов;
+  // у вышедших дата ни к чему (она есть в описании и фактах)
+  const unreleased = m.release_date && m.release_date.slice(0, 10) > new Date().toISOString().slice(0, 10);
+  const premiere = unreleased
     ? `ПРЕМЬЕРА ${escapeHtml(fmtDateRu(m.release_date).toUpperCase())}`
-    : m.year
-      ? escapeHtml(m.year)
-      : "ФИЛЬМ";
+    : "";
 
   return `
   <div class="movie-hero">
@@ -889,7 +896,7 @@ function moviePageHtml(m) {
         : `<div class="hero-thumb poster-empty">Нет постера</div>`
     }
     <div class="hero-text">
-      <div class="tag">${premiere}</div>
+      ${premiere ? `<div class="tag">${premiere}</div>` : ""}
       <h1>${escapeHtml(m.title || "Без названия")}</h1>
       <p class="movie-sub">${escapeHtml([m.original_title, (m.countries || []).join(", ")].filter(Boolean).join(" • "))}</p>
       <div class="ratings">${ratings}</div>
