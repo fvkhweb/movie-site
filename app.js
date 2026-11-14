@@ -119,6 +119,7 @@ async function loadData() {
   renderRails();
   // Прямая ссылка на фильм: страницу можно отрисовать только после загрузки базы
   if (currentMovieId() !== null) renderMoviePage(currentMovieId());
+  if (document.body.dataset.view === "rails") renderRailsPage();
 
   // Актёры и подборки грузим в фоне — не блокируют первую отрисовку
   Promise.allSettled([
@@ -288,11 +289,14 @@ function filmsWord(n) {
   return "ФИЛЬМОВ";
 }
 
-function cardHtml(m) {
+function cardHtml(m, opts = {}) {
   const { local, fallback } = posterSources(m);
   const isFav = state.favorites.includes(m.id);
   const rating = m.rating ? Number(m.rating).toFixed(1) : "";
   const genreName = (state.genres.find((g) => g.id === (m.genres || [])[0]) || {}).name || "";
+  const sub = opts.date && m.release_date
+    ? `В КИНО ${fmtDateRu(m.release_date).toUpperCase()}`
+    : [m.year || "", genreName ? genreName.toUpperCase() : ""].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
 
   return `
   <article class="movie anim" data-id="${m.id}">
@@ -303,7 +307,7 @@ function cardHtml(m) {
       <button class="heart ${isFav ? "saved" : ""}" data-id="${m.id}" aria-label="В избранное">${isFav ? "♥" : "♡"}</button>
     </div>
     <div class="movie-title">${escapeHtml(m.title || "Без названия")}</div>
-    <div class="movie-sub">${escapeHtml(m.year || "")}${genreName ? " &nbsp;·&nbsp; " + escapeHtml(genreName.toUpperCase()) : ""}</div>
+    <div class="movie-sub">${sub}</div>
   </article>`;
 }
 
@@ -503,6 +507,69 @@ function hideCollectionsPage() {
   document.title = "Что посмотреть?";
 }
 
+/* ── Страницы «На слуху сейчас» (#trending) и «Скоро в кино» (#soon) ── */
+
+const RAIL_TITLES = {
+  trending: { title: "НА СЛУХУ СЕЙЧАС", meta: "TRENDING NOW", page: "На слуху сейчас" },
+  soon: { title: "СКОРО В КИНО", meta: "COMING SOON", page: "Скоро в кино" },
+};
+
+function renderRailsPage() {
+  if (document.body.dataset.view !== "rails") return;
+  const grid = el("railsGrid");
+  if (!grid) return;
+  const mode = state.railsMode;
+  const info = RAIL_TITLES[mode];
+  const today = new Date().toISOString().slice(0, 10);
+  let list;
+  if (mode === "soon") {
+    const raw = (state.lists.upcoming || []).map(movieById).filter(Boolean);
+    list = [
+      ...raw
+        .filter((m) => m.release_date && m.release_date.slice(0, 10) >= today)
+        .sort((a, b) => a.release_date.localeCompare(b.release_date)),
+      ...raw.filter((m) => !m.release_date),
+    ];
+  } else {
+    list = (state.lists.now_playing || []).map(movieById).filter(Boolean);
+  }
+  const meta = el("railsMeta");
+  if (meta) meta.textContent = `${info.meta} · ${list.length} ${filmsWord(list.length)}`;
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty">Список подтянется при следующем обновлении базы.</div>';
+    return;
+  }
+  grid.innerHTML = list.map((m) => cardHtml(m, { date: mode === "soon" })).join("");
+  bindImageFallbacks(grid);
+  reveal(grid);
+}
+
+function showRailsPage(mode) {
+  state.railsMode = mode;
+  document.body.dataset.view = "rails";
+  const info = RAIL_TITLES[mode];
+  const page = el("railsPage");
+  page.innerHTML = `<div class="wrap coll-page-head">
+      <button class="movie-back" id="railsBack" title="Назад">← Назад</button>
+      <div class="section-head"><div class="section-title">${info.title}</div><div class="section-meta" id="railsMeta">${info.meta}</div></div>
+    </div>
+    <div class="wrap"><div class="grid" id="railsGrid"></div></div>`;
+  page.hidden = false;
+  document.title = `${info.page} — Что посмотреть?`;
+  renderRailsPage();
+  updateNavActive();
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function hideRailsPage() {
+  state.railsMode = null;
+  document.body.dataset.view = "";
+  const page = el("railsPage");
+  page.hidden = true;
+  page.innerHTML = "";
+  document.title = "Что посмотреть?";
+}
+
 /* ── Ленты «На слуху сейчас» и «Скоро в кино» ──────── */
 
 function fmtDateRu(iso) {
@@ -532,11 +599,15 @@ function renderRails() {
   const today = new Date().toISOString().slice(0, 10);
   const now = (state.lists.now_playing || []).map(movieById).filter(Boolean);
   // «Скоро в кино» — только невышедшие, ближайшие первыми;
-  // страховка от залежавшихся дат в данных
-  const up = (state.lists.upcoming || [])
-    .map(movieById)
-    .filter((m) => m.release_date && m.release_date.slice(0, 10) >= today)
-    .sort((a, b) => a.release_date.localeCompare(b.release_date));
+  // страховка от залежавшихся дат в данных. Анонсы без точной даты
+  // (например, просто «2027») — в конце списка.
+  const upRaw = (state.lists.upcoming || []).map(movieById).filter(Boolean);
+  const up = [
+    ...upRaw
+      .filter((m) => m.release_date && m.release_date.slice(0, 10) >= today)
+      .sort((a, b) => a.release_date.localeCompare(b.release_date)),
+    ...upRaw.filter((m) => !m.release_date),
+  ];
 
   const nowRow = el("nowRow");
   if (nowRow) {
@@ -956,22 +1027,34 @@ function route() {
   const id = currentMovieId();
   const wasMovie = document.body.dataset.view === "movie";
   const wasColl = document.body.dataset.view === "collections";
-  const wasAny = wasMovie || wasColl;
+  const wasRails = document.body.dataset.view === "rails";
+  const wasAny = wasMovie || wasColl || wasRails;
   if (id !== null) {
     if (!wasAny) state.homeScroll = window.scrollY;
     if (wasColl) hideCollectionsPage();
+    if (wasRails) hideRailsPage();
     renderMoviePage(id);
     return;
   }
   if (location.hash === "#collections") {
     if (!wasAny) state.homeScroll = window.scrollY;
     if (wasMovie) exitMoviePage();
+    if (wasRails) hideRailsPage();
     if (!wasColl) showCollectionsPage();
+    return;
+  }
+  if (location.hash === "#trending" || location.hash === "#soon") {
+    const mode = location.hash === "#trending" ? "trending" : "soon";
+    if (!wasAny) state.homeScroll = window.scrollY;
+    if (wasMovie) exitMoviePage();
+    if (wasColl) hideCollectionsPage();
+    if (!wasRails || state.railsMode !== mode) showRailsPage(mode);
     return;
   }
   // возврат на главную
   if (wasMovie) exitMoviePage();
   if (wasColl) hideCollectionsPage();
+  if (wasRails) hideRailsPage();
   if (wasAny) {
     updateNavActive();
     render();
@@ -1011,7 +1094,7 @@ function goBack() {
    актёр, похожий фильм, кнопка «Назад» */
 function bindMovieBodyActions(root) {
   root.addEventListener("click", (e) => {
-    const back = e.target.closest("#movieBack, #collBack");
+    const back = e.target.closest("#movieBack, #collBack, #railsBack");
     if (back) {
       goBack();
       return;

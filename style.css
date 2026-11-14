@@ -230,6 +230,8 @@ body[data-view="movie"] main{display:none}
 body[data-view="movie"] footer{display:none}
 body[data-view="collections"] main{display:none}
 body[data-view="collections"] footer{display:none}
+body[data-view="rails"] main{display:none}
+body[data-view="rails"] footer{display:none}
 /* Кадр на всю ширину в пропорции 16:9 — виден практически целиком */
 .movie-hero{position:relative;aspect-ratio:16/9;max-height:84vh;width:100%;overflow:hidden;background:linear-gradient(135deg,#141a26,#0d1119);animation:heroIn .5s ease both}
 .hero-art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;filter:saturate(.85)}
@@ -276,6 +278,12 @@ body[data-view="collections"] footer{display:none}
 #collectionsPage .collection{margin-bottom:52px}
 #collectionsPage .collection:last-child{margin-bottom:0}
 body[data-view="collections"] footer{display:none}
+
+/* ── Страницы трендов/анонсов: заголовки-ссылки на главной ── */
+.section-title a{color:inherit;text-decoration:none}
+.section-title a::after{content:" →";opacity:0;transition:opacity .2s}
+.section-title a:hover{color:var(--blue2)}
+.section-title a:hover::after{opacity:.85}
 
 /* ── Анимации ── */
 .anim{opacity:0;transform:translateY(14px);transition:opacity .45s ease,transform .45s ease}

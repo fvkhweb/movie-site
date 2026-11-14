@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://images.weserv.nl">
   <link rel="dns-prefetch" href="https://image.tmdb.org">
   <link rel="stylesheet" href="fonts/fonts.css?v=5">
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
   <header>
@@ -89,13 +89,13 @@
     </section>
 
     <section class="catalog-section" id="nowPlaying">
-      <div class="section-head"><div class="section-title">НА СЛУХУ СЕЙЧАС</div><div class="section-meta">TRENDING NOW</div></div>
+      <div class="section-head"><div class="section-title"><a href="#trending">НА СЛУХУ СЕЙЧАС</a></div><div class="section-meta">TRENDING NOW</div></div>
       <div class="rail" id="nowRow"></div>
       <div id="nowEmpty" class="empty" hidden>Список премьер подтянется при следующем обновлении базы.</div>
     </section>
 
     <section class="catalog-section" id="upcoming">
-      <div class="section-head"><div class="section-title">СКОРО В КИНО</div><div class="section-meta">COMING SOON</div></div>
+      <div class="section-head"><div class="section-title"><a href="#soon">СКОРО В КИНО</a></div><div class="section-meta">COMING SOON</div></div>
       <div class="rail" id="upRow"></div>
       <div id="upEmpty" class="empty" hidden>Список анонсов подтянется при следующем обновлении базы.</div>
     </section>
@@ -132,6 +132,8 @@
 
   <section id="collectionsPage" hidden></section>
 
+  <section id="railsPage" hidden></section>
+
   <nav class="tabbar" aria-label="Навигация">
     <a href="#home" data-tab="home"><span>⌂</span>Главная</a>
     <a href="#catalog" data-tab="catalog"><span>▤</span>Каталог</a>
@@ -140,7 +142,7 @@
     <a href="#saved" data-tab="saved"><span>♡</span>Избранное</a>
   </nav>
 
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 
   <!-- Yandex.Metrika counter -->
   <script type="text/javascript">
