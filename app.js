@@ -39,14 +39,14 @@ function escapeAttr(v) {
 }
 
 function personPhotoSources(path, width) {
-  // Цепочка: wsrv → images.weserv.nl → зеркалоimagetmdb → прямой TMDB.
-  // Прокси одного проекта на разных доменах: если один лежит, другой жив.
+  // Цепочка прокси: wsrv → images.weserv.nl → imagetmdb → statically.io → прямой TMDB.
+  // Все — бесплатных CDN-зеркал TMDB: если одно лежит, подхватывает следующее.
   if (!path) return null;
   const w = width || 185;
   const p = `image.tmdb.org/t/p/w${w}${path}`;
   return {
     src: `${PROXY_IMG}${p}`,
-    fallback: `${PROXY_IMG_2}${p}|https://imagetmdb.com/t/p/w${w}${path}|https://${p}`,
+    fallback: `${PROXY_IMG_2}${p}|https://imagetmdb.com/t/p/w${w}${path}|https://cdn.statically.io/img/${p}|https://${p}`,
   };
 }
 
@@ -887,7 +887,7 @@ function setMovieHeroBackdrop(m) {
   if (m.frame) chain.push(m.frame);
   if (m.backdrop) {
     const p = `image.tmdb.org/t/p/w1280${m.backdrop}`;
-    chain.push(`${PROXY_IMG}${p}`, `${PROXY_IMG_2}${p}`, `https://imagetmdb.com/t/p/w1280${m.backdrop}`, `https://${p}`);
+    chain.push(`${PROXY_IMG}${p}`, `${PROXY_IMG_2}${p}`, `https://imagetmdb.com/t/p/w1280${m.backdrop}`, `https://cdn.statically.io/img/${p}`, `https://${p}`);
   }
   if (!chain.length) {
     // Кадра нет совсем — убираем пустой баннер, контент начинается сразу
@@ -912,12 +912,19 @@ function moviePageHtml(m) {
     .map((gid) => (state.genres.find((g) => g.id === gid) || {}).name)
     .filter(Boolean)
     .map((name) => `<span class="chip">${escapeHtml(name)}</span>`)
+    .concat(
+      (m.countries || []).map((c) => `<span class="chip chip-country">${escapeHtml(c)}</span>`)
+    )
     .join("");
 
   const ratings = [
-    m.rating ? `<span class="rating-pill"><span class="label">TMDB</span>⭐ ${Number(m.rating).toFixed(1)}</span>` : "",
-    m.kp_rating ? `<span class="rating-pill"><span class="label">Кинопоиск</span>⭐ ${Number(m.kp_rating).toFixed(1)}</span>` : "",
-    m.runtime ? `<span class="rating-pill"><span class="label">Время</span>${runtimeLabel(m.runtime)}</span>` : "",
+    m.rating
+      ? `<span class="rating-pill ${ratingClass(m.rating)}"><span class="label">TMDB</span><span class="val">★ ${Number(m.rating).toFixed(1)}</span></span>`
+      : "",
+    m.kp_rating
+      ? `<span class="rating-pill ${ratingClass(m.kp_rating)}"><span class="label">Кинопоиск</span><span class="val">★ ${Number(m.kp_rating).toFixed(1)}</span></span>`
+      : "",
+    m.runtime ? `<span class="rating-pill"><span class="label">Время</span><span class="val">${runtimeLabel(m.runtime)}</span></span>` : "",
   ].filter(Boolean).join("");
 
   const cast = (state.cast && state.cast[String(m.id)]) || [];

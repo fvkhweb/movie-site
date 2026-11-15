@@ -151,6 +151,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 .rating-pill .label{color:var(--muted);margin-right:6px}
 .movie-info .chips{padding:0 0 4px;flex-wrap:wrap;overflow:visible}
 .movie-info .chip{pointer-events:none}
+.hero-text .chip-country{color:#8fa3bd;border-style:dashed}
 .movie-actions{display:flex;gap:10px;margin:12px 0 26px}
 .movie-actions .fav-btn{border:1px solid #384252;background:transparent;color:#dce2eb;border-radius:6px;padding:11px 16px;font-size:12px;font-weight:800}
 .movie-actions .fav-btn:hover{border-color:var(--blue)}
@@ -241,6 +242,15 @@ body[data-view="rails"] footer{display:none}
 /* Постер и информация — сразу под кадром, постер заходит на него краем */
 .movie-head{position:relative;z-index:2;display:flex;gap:26px;align-items:flex-end;margin:-80px auto 0;width:min(1320px,calc(100% - 64px));animation:riseIn .45s ease .08s both}
 .movie-head.no-hero{margin-top:30px}
+/* Страница фильма: крупные рейтинги с цветовой шкалой */
+.hero-text .ratings{margin:16px 0 12px;gap:10px}
+.hero-text .rating-pill{font-size:13px;padding:9px 13px;border-radius:8px;background:rgba(9,11,15,.65)}
+.hero-text .rating-pill .label{font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.hero-text .rating-pill .val{font-weight:800;font-size:14px}
+.hero-text .rating-pill.good{border-color:#2e7d4f;color:#7fe0a7}
+.hero-text .rating-pill.mid{border-color:#8a6d2f;color:#ffd47f}
+.hero-text .rating-pill.bad{border-color:#7d3a3a;color:#ff9d9d}
+
 .hero-thumb{flex:none;width:200px;aspect-ratio:2/3;object-fit:cover;object-position:top;border-radius:12px;border:1px solid #ffffff20;box-shadow:0 18px 50px rgba(0,0,0,.55);background:var(--panel2)}
 .hero-thumb.poster-empty{display:grid;place-items:center;color:var(--muted);font-size:12px}
 .hero-text{min-width:0;flex:1;padding-bottom:6px}
