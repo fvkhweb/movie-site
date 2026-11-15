@@ -5,7 +5,7 @@
 const PAGE_SIZE = window.matchMedia("(max-width: 650px)").matches ? 30 : 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "9"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "10"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -54,6 +54,12 @@ function ratingClass(value) {
   if (value >= 7.5) return "good";
   if (value >= 6) return "mid";
   return "bad";
+}
+
+function movieDescription(m) {
+  // Русский обзор — основной; если его нет (или он оказался чужим и был
+  // выброшен ботом), показываем английский оригинал с TMDB
+  return m.description || m.description_en || "";
 }
 
 function posterSources(movie) {
@@ -384,10 +390,10 @@ function renderFeature() {
   if (!feature || !state.movies.length) return;
   // Если у популярных фильмов есть кадры с Кинопоиска (Яндекс.CDN) —
   // показываем фильм с кадром: он ландшафтный и красиво заполняет блок
-  const withFrame = state.movies.filter((m) => m.frame && m.description && m.rating);
+  const withFrame = state.movies.filter((m) => m.frame && movieDescription(m) && m.rating);
   const pool = withFrame.length
     ? withFrame
-    : state.movies.filter((m) => m.description && m.rating);
+    : state.movies.filter((m) => movieDescription(m) && m.rating);
   if (!pool.length) return;
   const m = pool.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
 
@@ -411,7 +417,7 @@ function renderFeature() {
         ${m.runtime ? `<span>${runtimeLabel(m.runtime).toUpperCase()}</span>` : ""}
         <span class="rating">★ ${Number(m.rating).toFixed(1)}</span>
       </div>
-      <p>${escapeHtml(m.description)}</p>
+      <p>${escapeHtml(movieDescription(m))}</p>
       <div class="feature-actions">
         <button class="primary" data-open="${m.id}">О фильме <span>↗</span></button>
         <button class="secondary" data-heart="${m.id}">${isFav ? "♥ В избранном" : "＋ В избранное"}</button>
@@ -799,7 +805,7 @@ function openModal(id) {
       </div>
     </div>
     <div class="movie-body">
-      <p class="overview">${escapeHtml(m.description || "Описание отсутствует.")}</p>
+      <p class="overview">${escapeHtml(movieDescription(m) || "Описание отсутствует.")}</p>
     </div>
     ${factsHtml}
     ${castHtml}
@@ -1001,7 +1007,7 @@ function moviePageHtml(m) {
     </div>
   </div>
   <div class="wrap movie-page-body">
-    <div class="overview-block"><p class="overview">${escapeHtml(m.description || "Описание отсутствует.")}</p></div>
+    <div class="overview-block"><p class="overview">${escapeHtml(movieDescription(m) || "Описание отсутствует.")}</p></div>
     ${factsHtml}
     ${castHtml}
     ${similarHtml}

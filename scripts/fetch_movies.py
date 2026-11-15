@@ -68,6 +68,38 @@ def tmdb_get(path, params=None):
     return None
 
 
+def norm_title(s):
+    """Название для сравнения: нижний регистр, ё→е, без пунктуации."""
+    s = (s or "").lower().replace("ё", "е")
+    s = re.sub(r"[^0-9a-zа-я]+", " ", s)
+    return " ".join(s.split())
+
+
+def titles_match(a, b):
+    """Названия совпадают или одно целиком входит в другое
+    («Дюна» / «Дюна: Часть вторая»). Короткие строки — только точно."""
+    a, b = norm_title(a), norm_title(b)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    return len(a) >= 4 and len(b) >= 4 and (a in b or b in a)
+
+
+def kp_candidate_ok(query_names, query_year, cand_names, cand_year):
+    """Найденный на Кинопоиске фильм — тот же самый?
+    Название должно совпасть хотя бы по одному варианту (русский/оригинал),
+    год — с точностью до года (перезапуски и тёзки отсеиваются)."""
+    if not any(titles_match(q, c) for q in query_names if q for c in cand_names if c):
+        return False
+    try:
+        qy = int(str(query_year)[:4])
+        cy = int(str(cand_year)[:4])
+    except (TypeError, ValueError):
+        return True  # года нет — доверяем названию
+    return abs(qy - cy) <= 1
+
+
 def collect_candidates():
     """Список фильмов: популярное + топ + лучшее по каждому жанру."""
     found = {}  # id -> запись из списка (с popularity)
@@ -197,7 +229,7 @@ def enrich_movie(m):
     }
 
 
-def get_kp_unofficial(title, year):
+def get_kp_unofficial(title, year, original_title=""):
     """Резервный источник данных о фильме: Kinopoisk Unofficial API.
     Формат поиска v2.2: {"total": N, "items": [...]} с полем kinopoiskId."""
     if not KPU_API_KEYS:
@@ -221,7 +253,20 @@ def get_kp_unofficial(title, year):
         if not films:
             return None
 
-        f = films[0]
+        # Первый результат может быть другим фильмом (тёзка, ремейк) —
+        # берём только запись, совпавшую по названию и году
+        query_names = [title, original_title]
+        f = next(
+            (x for x in films if kp_candidate_ok(
+                query_names, year,
+                [x.get("nameRu"), x.get("nameEn"), x.get("nameOriginal")],
+                x.get("year"),
+            )),
+            None,
+        )
+        if not f:
+            print(f"  КП-Unofficial '{title}' ({year}): нет совпадения среди {len(films)} результатов")
+            return None
         film_id = f.get("filmId") or f.get("kinopoiskId")
         poster = f.get("posterUrl") or f.get("posterUrlPreview") or ""
         description = f.get("description")
@@ -364,11 +409,11 @@ def kp_dev_get(path, params=None):
         return r
 
 
-def get_kp_data(title, year):
+def get_kp_data(title, year, original_title=""):
     if not KP_DEV_KEYS:
         return None
     try:
-        params = {"query": title, "limit": 1}
+        params = {"query": title, "limit": 5}
         if year and str(year).isdigit():
             params["year"] = year
 
@@ -382,7 +427,20 @@ def get_kp_data(title, year):
         if not docs:
             return None
 
-        movie = docs[0]
+        # Первый результат может быть другим фильмом (тёзка, ремейк, кривой
+        # матч) — берём только запись, совпавшую по названию и году
+        query_names = [title, original_title]
+        movie = next(
+            (d for d in docs if kp_candidate_ok(
+                query_names, year,
+                [d.get("name"), d.get("alternativeName"), d.get("enName")],
+                d.get("year"),
+            )),
+            None,
+        )
+        if not movie:
+            print(f"  КП '{title}' ({year}): нет совпадения среди {len(docs)} результатов")
+            return None
         kp_id = movie["id"]
         poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
         time.sleep(0.3)
@@ -439,6 +497,24 @@ def load_old(name):
             return json.load(f)
     except Exception:
         return None
+
+
+# В русских обзорах TMDB иногда лежит текст совсем другого фильма
+# (правки пользователей). Автоматически такое не отличить: у триллеров
+# и документалок про насилие лексика похожая, но текст верный.
+# Поэтому — список подтверждённых вручную id + предупреждения в лог
+# для новых случаев (искать в логе «проверить описание»).
+BAD_DESC_IDS = {155, 1096228}  # «Тёмный рыцарь», «Маск»
+SUSPECT_DESC_RE = re.compile(r"сексуальн|порн|рабын|изнасил|эротич", re.I)
+
+
+def desc_suspicious(m):
+    return m["id"] in BAD_DESC_IDS
+
+
+def get_en_overview(movie_id):
+    details = tmdb_get(f"/movie/{movie_id}", {"language": "en-US"}) or {}
+    return (details.get("overview") or "").strip()
 
 
 def build_catalog():
@@ -498,7 +574,7 @@ def build_catalog():
     movies_raw.sort(key=lambda m: m.get("popularity") or 0, reverse=True)
     kp_ids = {}  # tmdb_id -> id Кинопоиска (для кадров)
     for m in [m for m in movies_raw if not m.get("kp_rating")][:KP_MAX_MOVIES]:
-        kp = get_kp_data(m.get("title"), m.get("year"))
+        kp = get_kp_data(m.get("title"), m.get("year"), m.get("original_title"))
         if kp:
             if kp.get("kp_id"):
                 kp_ids[m["id"]] = kp["kp_id"]
@@ -511,7 +587,7 @@ def build_catalog():
         time.sleep(0.3)
 
     for m in [m for m in movies_raw if not m.get("facts")][:UNOFFICIAL_MAX_MOVIES]:
-        kp = get_kp_unofficial(m.get("title"), m.get("year"))
+        kp = get_kp_unofficial(m.get("title"), m.get("year"), m.get("original_title"))
         if kp:
             if kp.get("film_id"):
                 kp_ids[m["id"]] = kp["film_id"]
@@ -524,6 +600,31 @@ def build_catalog():
             if kp.get("facts"):
                 m["facts"] = kp["facts"]
         time.sleep(0.3)
+
+    # ── Чистка описаний ──
+    # Чужой текст (описание другого фильма) выбрасываем и подставляем
+    # английский обзор TMDB — он приходит из официальной карточки и вранья
+    # не содержит. Тем же способом закрываем фильмы вообще без описания.
+    replaced = 0
+    for m in movies_raw:
+        desc = (m.get("description") or "").strip()
+        if desc and not desc_suspicious(m):
+            # Кандидатов на проверку печатаем в лог: если текст чужой —
+            # id добавляется в BAD_DESC_IDS
+            if SUSPECT_DESC_RE.search(desc):
+                print(f"  проверить описание: {m['id']} {m.get('title')} ({m.get('year')})")
+            continue
+        # Сначала смотрим вчерашний резерв — чтобы не дёргать TMDB каждый день
+        old = old_movies.get(m["id"]) or {}
+        en = old.get("description_en") or get_en_overview(m["id"]) or ""
+        if en:
+            m["description_en"] = en
+        if desc:
+            m.pop("description", None)
+            replaced += 1
+            print(f"  чужое описание: {m['id']} {m.get('title')} — заменено английским")
+        time.sleep(0.1)
+    print(f"описания: чужих заменено {replaced}")
 
     # Кадры из фильмов (Яндекс.CDN — работают из РФ без VPN) —
     # только для фильмов, у которых кадра ещё нет и есть id Кинопоиска
@@ -592,6 +693,10 @@ def build_catalog():
             m.pop("frame", None)
         if not m.get("release_date"):
             m.pop("release_date", None)
+        if not m.get("description"):
+            m.pop("description", None)
+        if not m.get("description_en"):
+            m.pop("description_en", None)
 
     save("movies", movies)
     save("genres", genres)
