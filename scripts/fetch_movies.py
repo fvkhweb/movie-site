@@ -163,6 +163,10 @@ def enrich_movie(m):
     credits = tmdb_get(f"/movie/{m['id']}/credits") or {}
 
     release = details.get("release_date") or ""
+    # Режиссёр из съёмочной группы (может быть несколько — соединяем)
+    director = ", ".join(
+        c.get("name", "") for c in (credits.get("crew") or []) if c.get("job") == "Director"
+    )[:120]
     cast = []
     for c in (credits.get("cast") or [])[:8]:
         cast.append({
@@ -178,6 +182,7 @@ def enrich_movie(m):
         "original_title": details.get("original_title") or "",
         "year": release[:4],
         "release_date": release,
+        "director": director,
         "rating": round(details.get("vote_average") or 0, 1),
         "popularity": round(m.get("_popularity", 0), 1),
         "runtime": details.get("runtime") or 0,
@@ -579,6 +584,8 @@ def build_catalog():
             m.pop("trailer", None)
         if not m.get("facts"):
             m.pop("facts", None)
+        if not m.get("director"):
+            m.pop("director", None)
         if not m.get("backdrop"):
             m.pop("backdrop", None)
         if not m.get("frame"):

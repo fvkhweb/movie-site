@@ -5,7 +5,7 @@
 const PAGE_SIZE = window.matchMedia("(max-width: 650px)").matches ? 30 : 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "8"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "9"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -39,12 +39,14 @@ function escapeAttr(v) {
 }
 
 function personPhotoSources(path, width) {
-  // Цепочка: wsrv → images.weserv.nl → прямой TMDB. Хотя бы одно сработает.
+  // Цепочка: wsrv → images.weserv.nl → зеркалоimagetmdb → прямой TMDB.
+  // Прокси одного проекта на разных доменах: если один лежит, другой жив.
   if (!path) return null;
-  const p = `image.tmdb.org/t/p/w${width || 185}${path}`;
+  const w = width || 185;
+  const p = `image.tmdb.org/t/p/w${w}${path}`;
   return {
     src: `${PROXY_IMG}${p}`,
-    fallback: `${PROXY_IMG_2}${p}|https://${p}`,
+    fallback: `${PROXY_IMG_2}${p}|https://imagetmdb.com/t/p/w${w}${path}|https://${p}`,
   };
 }
 
@@ -556,6 +558,7 @@ function showRailsPage(mode) {
     <div class="wrap"><div class="grid" id="railsGrid"></div></div>`;
   page.hidden = false;
   document.title = `${info.page} — Что посмотреть?`;
+  bindImageFallbacks(el("railsGrid")); // свежий контейнер — свежий обработчик
   renderRailsPage();
   updateNavActive();
   window.scrollTo({ top: 0, behavior: "instant" });
@@ -662,13 +665,24 @@ function updateResultsCount(count) {
   if (clearActor) clearActor.onclick = () => { state.actor = ""; render(); };
 }
 
+// Подписи сортировки для заголовка каталога
+const SORT_TITLES = {
+  default: "ПОПУЛЯРНОЕ СЕЙЧАС",
+  rating_desc: "ЛУЧШИЕ ПО РЕЙТИНГУ",
+  kp_rating_desc: "ЛУЧШИЕ ПО КИНОПОИСКУ",
+  year_desc: "НОВИНКИ",
+  year_asc: "КЛАССИКА СНАЧАЛА",
+  title_asc: "ПО АЛФАВИТУ",
+  runtime_desc: "САМЫЕ ДЛИННЫЕ",
+};
+
 function updateCatalogTitle() {
   const q = el("search").value.trim();
   const title = q || state.actor
     ? "РЕЗУЛЬТАТЫ ПОИСКА"
     : state.genre
       ? (state.genres.find((g) => String(g.id) === state.genre) || {}).name?.toUpperCase() || "КАТАЛОГ"
-      : "ПОПУЛЯРНОЕ СЕЙЧАС";
+      : SORT_TITLES[el("sortSelect").value] || SORT_TITLES.default;
   el("catalogTitle").textContent = title;
 }
 
@@ -873,7 +887,7 @@ function setMovieHeroBackdrop(m) {
   if (m.frame) chain.push(m.frame);
   if (m.backdrop) {
     const p = `image.tmdb.org/t/p/w1280${m.backdrop}`;
-    chain.push(`${PROXY_IMG}${p}`, `${PROXY_IMG_2}${p}`, `https://${p}`);
+    chain.push(`${PROXY_IMG}${p}`, `${PROXY_IMG_2}${p}`, `https://imagetmdb.com/t/p/w1280${m.backdrop}`, `https://${p}`);
   }
   if (!chain.length) {
     // Кадра нет совсем — убираем пустой баннер, контент начинается сразу
@@ -968,8 +982,9 @@ function moviePageHtml(m) {
     }
     <div class="hero-text">
       ${premiere ? `<div class="tag">${premiere}</div>` : ""}
-      <h1>${escapeHtml(m.title || "Без названия")}</h1>
-      <p class="movie-sub">${escapeHtml([m.original_title, (m.countries || []).join(", ")].filter(Boolean).join(" • "))}</p>
+      <h1>${escapeHtml(m.title || "Без названия")}${m.year ? ` <span class="title-year">${escapeHtml(m.year)}</span>` : ""}</h1>
+      ${m.director ? `<p class="movie-byline">Режиссёр: <b>${escapeHtml(m.director)}</b></p>` : ""}
+      <p class="movie-sub">${escapeHtml(m.original_title || "")}</p>
       <div class="ratings">${ratings}</div>
       <div class="chips">${genreChips}</div>
       <div class="movie-actions">
@@ -1091,14 +1106,9 @@ function goBack() {
 }
 
 /* Клик внутри страницы фильма (и модалки-запаски): избранное, трейлер,
-   актёр, похожий фильм, кнопка «Назад» */
+   актёр, похожий фильм. Кнопки «Назад» обрабатываются на документе. */
 function bindMovieBodyActions(root) {
   root.addEventListener("click", (e) => {
-    const back = e.target.closest("#movieBack, #collBack, #railsBack");
-    if (back) {
-      goBack();
-      return;
-    }
     const fav = e.target.closest(".fav-btn");
     if (fav) {
       toggleFavorite(Number(fav.dataset.id));
@@ -1225,8 +1235,8 @@ function bindEvents() {
   // Клик по карточке / сердечку / фич-блоку (делегирование на документе,
   // работает и для каталога, и для «Твоего списка»)
   document.addEventListener("click", (e) => {
-    const pageBack = e.target.closest("#collBack");
-    if (pageBack) {
+    const back = e.target.closest("#movieBack, #collBack, #railsBack");
+    if (back) {
       goBack();
       return;
     }

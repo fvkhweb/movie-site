@@ -245,6 +245,9 @@ body[data-view="rails"] footer{display:none}
 .hero-thumb.poster-empty{display:grid;place-items:center;color:var(--muted);font-size:12px}
 .hero-text{min-width:0;flex:1;padding-bottom:6px}
 .hero-text h1{font:700 clamp(26px,4vw,44px)/1.1 Unbounded;letter-spacing:-2px;margin:10px 0 8px}
+.hero-text h1 .title-year{font-size:.42em;font-weight:600;color:#8b95a6;letter-spacing:0;vertical-align:.35em;margin-left:8px}
+.hero-text .movie-byline{font-size:12.5px;color:#cdd5e0;margin:0 0 6px}
+.hero-text .movie-byline b{font-weight:700;color:#fff}
 .hero-text .movie-sub{font-size:12px;color:#aab3c0}
 .hero-text .ratings{margin:14px 0 10px}
 .hero-text .chips{padding:0 0 2px;flex-wrap:wrap;overflow:visible;mask-image:none;-webkit-mask-image:none}
