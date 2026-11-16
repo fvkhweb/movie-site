@@ -69,6 +69,14 @@ function posterSources(movie) {
   return { local, fallback };
 }
 
+function kpFrameSources(url) {
+  // Кадр Кинопоиска бывает в размере /orig (~4 МБ!) и /960x540 (~80 КБ).
+  // Просим маленький, оригинал держим запасным.
+  if (!url) return null;
+  const small = url.replace(/\/orig$/, "/960x540");
+  return { small, orig: url };
+}
+
 function runtimeLabel(min) {
   if (!min) return "";
   const h = Math.floor(min / 60);
@@ -398,8 +406,9 @@ function renderFeature() {
   const m = pool.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
 
   const { local, fallback } = posterSources(m);
-  const artSrc = m.frame || local;
-  const artFallback = m.frame ? local : fallback;
+  const kp = kpFrameSources(m.frame);
+  const artSrc = (kp && kp.small) || local;
+  const artFallback = kp ? [kp.orig, local].filter(Boolean).join("|") : fallback;
   const isFav = state.favorites.includes(m.id);
   const genreName = (state.genres.find((g) => g.id === (m.genres || [])[0]) || {}).name || "";
   const tag = [genreName.toUpperCase(), (m.countries || [])[0]?.toUpperCase()].filter(Boolean).join(" / ");
@@ -889,8 +898,10 @@ function setMovieHeroBackdrop(m) {
     }
   };
   const chain = [];
-  // Кадр Кинопоиска (Яндекс.CDN — из РФ без VPN), затем TMDB-кадр через прокси
-  if (m.frame) chain.push(m.frame);
+  // Кадр Кинопоиска (Яндекс.CDN — из РФ без VPN), сначала маленький вариант,
+  // затем оригинал, затем TMDB-кадр через прокси
+  const kp = kpFrameSources(m.frame);
+  if (kp) chain.push(kp.small, kp.orig);
   if (m.backdrop) {
     const p = `image.tmdb.org/t/p/w1280${m.backdrop}`;
     chain.push(`${PROXY_IMG}${p}`, `${PROXY_IMG_2}${p}`, `https://imagetmdb.com/t/p/w1280${m.backdrop}`, `https://cdn.statically.io/img/${p}`, `https://${p}`);
