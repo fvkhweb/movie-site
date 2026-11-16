@@ -144,18 +144,27 @@ def collect_candidates():
             now_ids.append(m["id"])
         print(f"тренды недели: страница {page}, всего {len(found)}")
 
+    # Анонсы: /movie/upcoming почти целиком состоит из залёжавшихся дат,
+    # поэтому берём /discover с датой от сегодняшнего дня и вперёд на 90 дней.
     for page in range(1, UP_PAGES + 1):
-        data = tmdb_get("/movie/upcoming", {"page": page, "include_adult": "false"})
+        data = tmdb_get("/discover/movie", {
+            "include_adult": "false",
+            "primary_release_date.gte": today,
+            "primary_release_date.lte": (datetime.date.today() + datetime.timedelta(days=90)).isoformat(),
+            "sort_by": "popularity.desc",
+            "page": page,
+        })
         if not data:
             break
         for m in data.get("results", []):
-            # Только ещё не вышедшие: TMDB держит в списке и залёжавшиеся даты
+            # На всякий случай фильтруем и тут: discover иногда подсовывает
+            # фильменты с датой в прошлом
             if (m.get("release_date") or "") < today:
                 continue
             m["_popularity"] = m.get("popularity", 0)
             found.setdefault(m["id"], m)
             up_ids.append(m["id"])
-        print(f"скоро: страница {page}, всего {len(found)}")
+        print(f"скоро: страница {page}, всего {len(up_ids)}")
     # Ближайшие премьеры — первыми
     up_ids.sort(key=lambda mid: (found[mid].get("release_date") or "9999-99-99"))
 
