@@ -20,8 +20,8 @@
   <link rel="preconnect" href="https://imagetmdb.com">
   <link rel="preconnect" href="https://cdn.statically.io">
   <link rel="dns-prefetch" href="https://image.tmdb.org">
-  <link rel="stylesheet" href="fonts/fonts.css?v=5">
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="fonts/fonts.css?v=6">
+  <link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
   <header>
@@ -69,6 +69,22 @@
       </select>
       <button class="filtertoggle" id="randomBtn" title="Случайный фильм из текущей подборки">🎲 Случайный</button>
       <button class="filtertoggle" id="filterToggle" title="Дополнительные фильтры">Фильтры <span>⌄</span></button>
+      <div class="country-dropdown" id="countryDropdown">
+        <button class="filtertoggle" id="countryToggle" aria-expanded="false" aria-haspopup="true" title="Фильтр по странам">
+          Страны <b class="country-badge" id="countryBadge" hidden>0</b> <span>⌄</span>
+        </button>
+        <div class="country-popover" id="countryPopover" hidden>
+          <div class="country-popover-head">
+            <input class="country-search" id="countrySearch" placeholder="Найти страну..." autocomplete="off">
+            <button type="button" class="country-clear" id="countryClear">Сбросить страны</button>
+          </div>
+          <div class="country-grid" id="countryChips"></div>
+          <div class="country-foot">
+            <span>Клик — включить · ещё раз — исключить · третий — снять</span>
+            <span class="country-foot-count" id="countrySummary"></span>
+          </div>
+        </div>
+      </div>
       <button class="filtertoggle" id="resetBtn" title="Сбросить все фильтры">Сбросить <span>↺</span></button>
     </div>
 
@@ -154,7 +170,7 @@
     <a href="#saved" data-tab="saved"><span>♡</span>Избранное</a>
   </nav>
 
-  <script src="app.js?v=21"></script>
+  <script src="app.js?v=26"></script>
   <script>
     if ("serviceWorker" in navigator) {
       addEventListener("load", () => navigator.serviceWorker.register("sw.js"));

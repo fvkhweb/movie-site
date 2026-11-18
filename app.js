@@ -17,6 +17,10 @@ const state = {
   people: null, // [{ id, name, photo, movies: [] }]
   collections: [], // пользовательские подборки (data/collections.json)
   genre: "",    // активный жанр (чипсы)
+  countries: [], // страны из данных: [{ name, label, count }]
+  countryInclude: new Set(), // показывать только эти страны
+  countryExclude: new Set(), // исключить эти страны
+  countryQuery: "", // поиск по списку стран
   favorites: JSON.parse(localStorage.getItem("favorites") || "[]"),
   limit: PAGE_SIZE,
   actor: "",    // фильтр «фильмы актёра»
@@ -28,10 +32,10 @@ const el = (id) => document.getElementById(id);
 
 /* ── Даты релиза ───────────────────────────────────── */
 
-// Фильм, до премьеры которого не больше месяца, ещё показываем в каталоге
-// с плашкой «Скоро в кино». Дальние премьеры (2027 и т.д.) живут только
+// Фильм, до премьеры которого не больше недели, ещё показываем в каталоге
+// с плашкой «Скоро в кино». Премьеры дальше недели живут только
 // в блоке «Скоро в кино», чтобы не забивать «Новинки».
-const SOON_DAYS = 30;
+const SOON_DAYS = 7;
 const DAY_MS = 86400000;
 
 function todayISO() {
@@ -219,6 +223,8 @@ function fillControls() {
       sel.appendChild(opt);
     }
   }
+
+  buildCountryFilter();
 }
 
 /* ── Чипсы жанров (как в макете) ───────────────────── */
@@ -250,9 +256,146 @@ function setGenre(genreId) {
   document.querySelectorAll("#chips .chip").forEach((c) =>
     c.classList.toggle("active", c.dataset.genre === genreId)
   );
-  // жанр живёт внутри панели «Фильтры» — подсвечиваем кнопку
-  el("filterToggle").classList.toggle("has-genre", !!genreId);
+  // жанр и страны живут внутри панели «Фильтры» — подсвечиваем кнопку
+  updateFilterHighlight();
   render();
+}
+
+/* ── Фильтр по странам: широкий выпадающий список ──── */
+
+function buildCountryFilter() {
+  const counts = new Map();
+  state.movies.forEach((m) => {
+    (m.countries || []).forEach((c) => counts.set(c, (counts.get(c) || 0) + 1));
+  });
+  state.countries = [...counts.entries()]
+    .map(([name, count]) => ({ name, label: countryLabel(name), count }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+  renderCountryChips();
+}
+
+function renderCountryChips() {
+  const box = el("countryChips");
+  if (!box) return;
+  const q = state.countryQuery.trim().toLowerCase();
+  const list = state.countries.filter(
+    (c) => !q || c.label.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)
+  );
+  box.innerHTML = list.length
+    ? list
+        .map((c) => {
+          const inc = state.countryInclude.has(c.name);
+          const exc = state.countryExclude.has(c.name);
+          const cls = inc ? " include" : exc ? " exclude" : "";
+          const title = inc
+            ? "Включена — клик, чтобы исключить"
+            : exc
+              ? "Исключена — клик, чтобы снять"
+              : "Клик — включить, ещё раз — исключить";
+          return `<button type="button" class="country-option${cls}" data-country="${escapeAttr(c.name)}" title="${title}"><span class="cname">${escapeHtml(c.label)}</span><span class="mark" aria-hidden="true"></span></button>`;
+        })
+        .join("")
+    : `<div class="country-nothing">Ничего не найдено</div>`;
+  updateCountryBadge();
+}
+
+function updateCountryBadge() {
+  const total = state.countryInclude.size + state.countryExclude.size;
+  const badge = el("countryBadge");
+  if (badge) {
+    badge.hidden = !total;
+    badge.textContent = total;
+  }
+  const summary = el("countrySummary");
+  if (summary) {
+    const parts = [];
+    if (state.countryInclude.size) parts.push(`показывать: ${state.countryInclude.size}`);
+    if (state.countryExclude.size) parts.push(`исключить: ${state.countryExclude.size}`);
+    summary.textContent = parts.length ? parts.join(" · ") : "Страны не выбраны";
+  }
+}
+
+function countryOptionEl(name) {
+  return [...document.querySelectorAll(".country-option")].find(
+    (b) => b.dataset.country === name
+  );
+}
+
+// Красим один пункт на месте, чтобы список не терял прокрутку при клике
+function paintCountryOption(btn, name) {
+  if (!btn) return;
+  const inc = state.countryInclude.has(name);
+  const exc = state.countryExclude.has(name);
+  btn.classList.toggle("include", inc);
+  btn.classList.toggle("exclude", exc);
+  btn.title = inc
+    ? "Включена — клик, чтобы исключить"
+    : exc
+      ? "Исключена — клик, чтобы снять"
+      : "Клик — включить, ещё раз — исключить";
+}
+
+// Тройное состояние: выкл → включить → исключить → выкл
+function cycleCountry(name) {
+  if (state.countryInclude.has(name)) {
+    state.countryInclude.delete(name);
+    state.countryExclude.add(name);
+  } else if (state.countryExclude.has(name)) {
+    state.countryExclude.delete(name);
+  } else {
+    state.countryInclude.add(name);
+  }
+  paintCountryOption(countryOptionEl(name), name);
+  updateCountryBadge();
+  updateFilterHighlight();
+  render();
+}
+
+function clearCountries() {
+  state.countryInclude.clear();
+  state.countryExclude.clear();
+  state.countryQuery = "";
+  el("countrySearch").value = "";
+  renderCountryChips();
+  updateFilterHighlight();
+  render();
+}
+
+function openCountryPopover() {
+  const pop = el("countryPopover");
+  const btn = el("countryToggle");
+  if (!pop || !btn) return;
+  const r = btn.getBoundingClientRect();
+  const top = Math.round(Math.min(r.bottom + 8, window.innerHeight - 160));
+  pop.style.top = `${top}px`;
+  // Ниже кнопки на мобильном попап иначе уедет за нижний край экрана
+  pop.style.maxHeight = `${Math.max(220, Math.min(window.innerHeight * 0.72, window.innerHeight - top - 16, 560))}px`;
+  pop.hidden = false;
+  btn.setAttribute("aria-expanded", "true");
+  window.addEventListener("scroll", onCountryScroll, { passive: true });
+  window.addEventListener("resize", closeCountryPopover, { passive: true });
+  el("countrySearch").focus();
+}
+
+function closeCountryPopover() {
+  const pop = el("countryPopover");
+  if (!pop || pop.hidden) return;
+  pop.hidden = true;
+  el("countryToggle").setAttribute("aria-expanded", "false");
+  window.removeEventListener("scroll", onCountryScroll);
+  window.removeEventListener("resize", closeCountryPopover);
+}
+
+function onCountryScroll() {
+  closeCountryPopover();
+}
+
+function updateFilterHighlight() {
+  el("filterToggle").classList.toggle("has-genre", !!state.genre);
+  el("countryToggle").classList.toggle(
+    "has-country",
+    state.countryInclude.size > 0 || state.countryExclude.size > 0
+  );
 }
 
 /* ── Фильтрация ────────────────────────────────────── */
@@ -298,6 +441,9 @@ function filteredList() {
     // Дальние премьеры не мешают каталогу: они живут в блоке «Скоро в кино».
     // Исключение — явный поиск по названию: человек ищет конкретный фильм.
     if (!q && isFarUpcoming(m)) return false;
+    const countries = m.countries || [];
+    if (state.countryExclude.size && countries.some((c) => state.countryExclude.has(c))) return false;
+    if (state.countryInclude.size && !countries.some((c) => state.countryInclude.has(c))) return false;
     if (state.actor) return actorIds.has(m.id);
     if (genreExclude && (m.genres || []).includes(Number(genreExclude))) return false;
     if (genre && !(m.genres || []).includes(Number(genre))) return false;
@@ -340,6 +486,110 @@ const GENRE_EN = {
   27: "HORROR", 10402: "MUSIC", 9648: "MYSTERY", 10749: "ROMANCE", 878: "SCI-FI",
   10770: "TV MOVIE", 53: "THRILLER", 10752: "WAR", 37: "WESTERN",
 };
+
+// Русские названия стран TMDB (в данных они на английском).
+// Незнакомые страны показываем как есть — база обновляется автоматически.
+const COUNTRY_RU = {
+  "United States of America": "США",
+  "United Kingdom": "Великобритания",
+  "France": "Франция",
+  "Japan": "Япония",
+  "Germany": "Германия",
+  "Canada": "Канада",
+  "Italy": "Италия",
+  "Spain": "Испания",
+  "India": "Индия",
+  "China": "Китай",
+  "South Korea": "Южная Корея",
+  "Mexico": "Мексика",
+  "Australia": "Австралия",
+  "Hong Kong": "Гонконг",
+  "Belgium": "Бельгия",
+  "Ireland": "Ирландия",
+  "Brazil": "Бразилия",
+  "Sweden": "Швеция",
+  "Switzerland": "Швейцария",
+  "Denmark": "Дания",
+  "New Zealand": "Новая Зеландия",
+  "Finland": "Финляндия",
+  "Poland": "Польша",
+  "Netherlands": "Нидерланды",
+  "Thailand": "Таиланд",
+  "Norway": "Норвегия",
+  "Romania": "Румыния",
+  "Indonesia": "Индонезия",
+  "Czech Republic": "Чехия",
+  "United Arab Emirates": "ОАЭ",
+  "Austria": "Австрия",
+  "Luxembourg": "Люксембург",
+  "Taiwan": "Тайвань",
+  "Philippines": "Филиппины",
+  "South Africa": "ЮАР",
+  "Turkey": "Турция",
+  "Russia": "Россия",
+  "Cyprus": "Кипр",
+  "Greece": "Греция",
+  "Morocco": "Марокко",
+  "Ukraine": "Украина",
+  "Saudi Arabia": "Саудовская Аравия",
+  "Hungary": "Венгрия",
+  "Soviet Union": "СССР",
+  "Colombia": "Колумбия",
+  "Israel": "Израиль",
+  "Singapore": "Сингапур",
+  "Yugoslavia": "Югославия",
+  "Croatia": "Хорватия",
+  "Serbia": "Сербия",
+  "Bulgaria": "Болгария",
+  "Egypt": "Египет",
+  "Portugal": "Португалия",
+  "Iceland": "Исландия",
+  "Netherlands Antilles": "Антильские острова",
+  "Latvia": "Латвия",
+  "Palestinian Territory": "Палестина",
+  "Argentina": "Аргентина",
+  "Chile": "Чили",
+  "Qatar": "Катар",
+  "Vietnam": "Вьетнам",
+  "Lebanon": "Ливан",
+  "Tunisia": "Тунис",
+  "Malawi": "Малави",
+  "Bahamas": "Багамы",
+  "Belarus": "Беларусь",
+  "Ecuador": "Эквадор",
+  "Iran": "Иран",
+  "Macedonia": "Македония",
+  "Ethiopia": "Эфиопия",
+  "Ghana": "Гана",
+  "Jordan": "Иордания",
+  "Namibia": "Намибия",
+  "Puerto Rico": "Пуэрто-Рико",
+  "Nigeria": "Нигерия",
+  "Cuba": "Куба",
+  "Congo": "Конго",
+  "Syrian Arab Republic": "Сирия",
+  "Gabon": "Габон",
+  "Rwanda": "Руанда",
+  "Chad": "Чад",
+  "Cote D'Ivoire": "Кот-д’Ивуар",
+  "Estonia": "Эстония",
+  "Montenegro": "Черногория",
+  "Slovenia": "Словения",
+  "Czechoslovakia": "Чехословакия",
+  "West Germany": "ФРГ",
+  "East Germany": "ГДР",
+  "Georgia": "Грузия",
+  "Armenia": "Армения",
+  "Kazakhstan": "Казахстан",
+  "Uzbekistan": "Узбекистан",
+  "Moldova": "Молдова",
+  "Lithuania": "Литва",
+  "Azerbaijan": "Азербайджан",
+};
+
+function countryLabel(name) {
+  return COUNTRY_RU[name] || name;
+}
 
 function filmsWord(n) {
   const d = n % 10, h = n % 100;
@@ -1279,6 +1529,26 @@ function bindEvents() {
 
   el("randomBtn").addEventListener("click", openRandom);
 
+  el("countrySearch").addEventListener("input", () => {
+    state.countryQuery = el("countrySearch").value;
+    renderCountryChips();
+  });
+  el("countryChips").addEventListener("click", (e) => {
+    const option = e.target.closest(".country-option");
+    if (option) cycleCountry(option.dataset.country);
+  });
+  el("countryToggle").addEventListener("click", () => {
+    if (el("countryPopover").hidden) openCountryPopover();
+    else closeCountryPopover();
+  });
+  el("countryClear").addEventListener("click", clearCountries);
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#countryDropdown")) closeCountryPopover();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeCountryPopover();
+  });
+
   el("filterToggle").addEventListener("click", () => {
     const panel = el("filterPanel");
     panel.hidden = !panel.hidden;
@@ -1294,6 +1564,7 @@ function bindEvents() {
     el("ratingMin").value = "";
     el("sortSelect").value = "default";
     state.actor = "";
+    clearCountries();
     setGenre("");
     render();
   });

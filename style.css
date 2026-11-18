@@ -1,5 +1,6 @@
 /* «Что посмотреть?» — стиль Film Index: тёмный, синий акцент,
-   Unbounded (заголовки) + Manrope (текст) + DM Mono (мета). */
+   Unbounded (заголовки) + Manrope (текст) + Montserrat (кириллица в мете)
+   + DM Mono (только латиница и цифры). */
 
 :root{
   --bg:#090b0f;--panel:#11151c;--panel2:#171d27;--line:#252c38;
@@ -26,11 +27,11 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .iconbtn{width:38px;height:38px;border:1px solid var(--line);background:transparent;color:white;border-radius:50%;display:grid;place-items:center}
 .iconbtn:hover{border-color:var(--blue);color:var(--blue2)}
 .iconbtn.small{width:26px;height:26px;font-size:11px;border:0;color:var(--muted);flex:none}
-.favcount{font:11px 'DM Mono';color:var(--muted);white-space:nowrap}
+.favcount{font:600 11px Montserrat;letter-spacing:.4px;color:var(--muted);white-space:nowrap}
 
 /* ── Интро ── */
 .intro{display:grid;grid-template-columns:1fr auto;align-items:end;gap:30px;margin-bottom:34px}
-.eyebrow{font:11px 'DM Mono';letter-spacing:2px;color:var(--blue2);text-transform:uppercase;margin-bottom:18px}
+.eyebrow{font:600 11px Montserrat;letter-spacing:2px;color:var(--blue2);text-transform:uppercase;margin-bottom:18px}
 .intro h1{font:700 clamp(34px,5.2vw,66px)/1.08 Unbounded;margin:0;letter-spacing:-3px;max-width:850px}
 .intro h1 em{font-style:normal;color:var(--blue)}
 .intro-note{font-size:12px;line-height:1.7;color:var(--muted);max-width:190px;padding-bottom:7px}
@@ -44,13 +45,46 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .select{height:52px;background:#10141b;border:1px solid var(--line);border-radius:9px;color:#c6ccd5;padding:0 14px;min-width:150px;outline:0}
 .filtertoggle{height:52px;padding:0 18px;border:1px solid var(--line);border-radius:9px;background:transparent;color:#c6ccd5;display:flex;gap:9px;align-items:center;white-space:nowrap}
 .filtertoggle:hover{border-color:var(--blue)}
-.filtertoggle.has-genre{border-color:var(--blue);color:#dbe6ff;background:#3268ff14}
+.filtertoggle.has-genre,.filtertoggle.has-country{border-color:var(--blue);color:#dbe6ff;background:#3268ff14}
 .filterpanel{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
 .filterpanel[hidden]{display:none}
 .filterpanel .select{min-width:140px;flex:1;max-width:220px}
 /* чипсы жанров живут внутри панели фильтров — перенос строк вместо ленты */
 .filterpanel .chips{width:100%;flex-wrap:wrap;overflow:visible;padding:2px 0 0;
   mask-image:none;-webkit-mask-image:none}
+
+/* ── Фильтр по странам: широкий выпадающий список ── */
+.country-dropdown{position:relative}
+.country-badge{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 5px;border-radius:100px;background:var(--blue);color:#fff;font:600 10px Montserrat}
+.country-popover{position:fixed;z-index:45;left:50%;transform:translateX(-50%);top:150px;width:min(840px,calc(100vw - 32px));max-height:min(72vh,560px);display:flex;flex-direction:column;background:#11161f;border:1px solid #303949;border-radius:14px;box-shadow:0 28px 80px rgba(0,0,0,.7);padding:14px}
+.country-popover[hidden]{display:none}
+.country-popover-head{display:flex;gap:10px;margin-bottom:12px;flex:none}
+.country-search{height:40px;flex:1;background:#0d1119;border:1px solid var(--line);border-radius:8px;color:#e6ebf3;padding:0 13px;outline:0;font-size:13px}
+.country-search:focus{border-color:var(--blue)}
+.country-search::placeholder{color:#667080}
+.country-clear{height:40px;padding:0 14px;border:1px solid var(--line);border-radius:8px;background:transparent;color:#c6ccd5;font-size:12px;white-space:nowrap}
+.country-clear:hover{border-color:var(--blue);color:#fff}
+.country-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 6px;overflow:auto;padding:2px 4px 6px 0;scrollbar-width:thin}
+.country-option{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:#c6ccd5;font-size:12px;text-align:left;min-width:0;transition:background .15s,border-color .15s,color .15s}
+.country-option .cname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.country-option .mark{flex:none;width:15px;text-align:center;font-weight:700;color:#5b6675}
+.country-option:hover{background:#1a2130;border-color:#2b3444}
+.country-option.include{background:#3268ff1f;border-color:#3268ff66;color:#fff}
+.country-option.include .mark{color:#7fa0ff}
+.country-option.include .mark::before{content:"+"}
+.country-option.exclude{background:#8d3b3b14;border-color:#8d3b3b55;color:#ff9d9d}
+.country-option.exclude .mark{color:#ff9d9d}
+.country-option.exclude .mark::before{content:"−"}
+.country-option.exclude .cname{text-decoration:line-through;text-decoration-thickness:1px}
+.country-nothing{grid-column:1/-1;padding:26px 10px;text-align:center;color:var(--muted);font-size:12px}
+.country-foot{display:flex;justify-content:space-between;gap:12px;flex:none;border-top:1px solid var(--line);margin-top:10px;padding-top:10px;font-size:11px;color:#667080}
+.country-foot-count{color:#9ca6b5}
+@media(max-width:900px){.country-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){
+  .country-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .country-popover{padding:12px;max-height:70vh}
+  .country-foot span:first-child{display:none}
+}
 
 /* ── Чипсы жанров ── */
 .chips{display:flex;gap:8px;overflow:auto;padding:1px 0 26px;scrollbar-width:none;
@@ -63,7 +97,7 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 /* ── Заголовки секций ── */
 .section-head{display:flex;justify-content:space-between;align-items:center;margin:8px 0 18px}
 .section-title{font:600 17px Unbounded;letter-spacing:-.5px}
-.section-meta{font:11px 'DM Mono';color:var(--muted)}
+.section-meta{font:500 11px Montserrat;letter-spacing:.4px;color:var(--muted)}
 
 /* ── Фич-блок «Выбор редакции» ── */
 .feature{display:grid;grid-template-columns:1.05fr .95fr;min-height:390px;border:1px solid var(--line);border-radius:15px;overflow:hidden;background:#10141b;margin-bottom:64px}
@@ -73,10 +107,10 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .feature-art:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 55%,#10141b 100%),linear-gradient(0deg,rgba(0,0,0,.45),transparent 60%)}
 .feature-index{position:absolute;z-index:1;left:24px;top:22px;font:11px 'DM Mono';letter-spacing:1px;background:rgba(9,11,15,.7);padding:8px 10px;border:1px solid #ffffff25;border-radius:4px}
 .feature-copy{padding:42px 44px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
-.tag{font:10px 'DM Mono';letter-spacing:1.5px;color:var(--blue2);text-transform:uppercase}
+.tag{font:600 10px Montserrat;letter-spacing:1.4px;color:var(--blue2);text-transform:uppercase}
 .feature-copy h2{font:700 clamp(30px,3.5vw,47px)/1.12 Unbounded;letter-spacing:-2px;margin:16px 0 13px;text-transform:uppercase}
 .feature-copy p{color:#9ca6b5;font-size:13px;line-height:1.8;max-width:440px;margin:0 0 22px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
-.meta{display:flex;gap:14px;align-items:center;color:#aab3c0;font:11px 'DM Mono';margin-bottom:25px;flex-wrap:wrap}
+.meta{display:flex;gap:14px;align-items:center;color:#aab3c0;font:500 11px Montserrat;letter-spacing:.3px;margin-bottom:25px;flex-wrap:wrap}
 .rating{color:#dce5ff}
 .feature-actions{display:flex;gap:10px}
 .primary{border:0;background:var(--blue);color:white;border-radius:6px;padding:12px 18px;font-size:12px;font-weight:800}
@@ -93,11 +127,11 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .movie:hover .poster img{transform:scale(1.045);filter:brightness(.8)}
 .poster:after{content:"";position:absolute;inset:50% 0 0;background:linear-gradient(transparent,rgba(0,0,0,.35));pointer-events:none}
 .poster-rating{position:absolute;z-index:1;top:10px;left:10px;background:rgba(9,11,15,.8);border:1px solid #ffffff24;border-radius:4px;padding:5px 7px;font:10px 'DM Mono';color:#dce5ff}
-.poster-soon{position:absolute;z-index:1;left:0;right:0;bottom:0;padding:7px 6px 6px;text-align:center;background:linear-gradient(transparent,rgba(9,11,15,.94));border-top:1px solid #7fa0ff4d;font:9px 'DM Mono';letter-spacing:1.2px;color:#cfe0ff;text-transform:uppercase}
+.poster-soon{position:absolute;z-index:1;left:0;right:0;bottom:0;padding:9px 8px 8px;text-align:center;background:linear-gradient(transparent,rgba(9,11,15,.96));border-top:1px solid #7fa0ff66;font:600 10px/1.2 Montserrat;letter-spacing:.9px;color:#e3ebff;text-transform:uppercase}
 .heart{position:absolute;z-index:2;right:9px;top:9px;width:31px;height:31px;border-radius:50%;background:rgba(9,11,15,.75);border:1px solid #ffffff35;color:white;display:grid;place-items:center;font-size:13px;line-height:1}
 .heart.saved{color:#7fa0ff;border-color:var(--blue)}
 .movie-title{font-size:13px;font-weight:800;margin:11px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.movie-sub{font:10px 'DM Mono';color:var(--muted)}
+.movie-sub{font:500 11px/1.4 Montserrat;letter-spacing:.15px;color:var(--muted)}
 .empty{grid-column:1/-1;padding:50px 20px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:10px}
 .sentinel{height:1px}
 .skeleton{aspect-ratio:2/3;border-radius:9px;background:linear-gradient(100deg,#131820 40%,#1a2130 50%,#131820 60%);background-size:200% 100%;animation:shimmer 1.4s infinite}
@@ -108,7 +142,7 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .genre-card{height:112px;border:1px solid var(--line);border-radius:9px;padding:18px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(135deg,#151b25,#0e1117);cursor:pointer}
 .genre-card:hover{border-color:var(--blue);background:#121a2b}
 .genre-card b{font:600 15px Unbounded}
-.genre-card span{font:10px 'DM Mono';color:var(--muted)}
+.genre-card span{font:600 10px Montserrat;letter-spacing:.5px;color:var(--muted)}
 
 /* ── Подборки ── */
 .collection{margin-bottom:44px}
@@ -148,7 +182,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 .movie-info h2{font:600 25px Unbounded;line-height:1.2;margin:12px 0 6px}
 .movie-info .movie-sub{font-size:11px}
 .ratings{display:flex;gap:8px;margin:14px 0 10px;flex-wrap:wrap}
-.rating-pill{font:11px 'DM Mono';border:1px solid #384252;border-radius:5px;padding:6px 9px;color:#dce5ff;background:rgba(9,11,15,.5)}
+.rating-pill{font:500 11px Montserrat;letter-spacing:.2px;border:1px solid #384252;border-radius:5px;padding:6px 9px;color:#dce5ff;background:rgba(9,11,15,.5)}
 .rating-pill .label{color:var(--muted);margin-right:6px}
 .movie-info .chips{padding:0 0 4px;flex-wrap:wrap;overflow:visible}
 .movie-info .chip{pointer-events:none}
@@ -172,7 +206,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 .cast-photo-empty{display:grid;place-items:center;background:var(--panel2);font-size:22px}
 .cast-card:hover img{border-color:var(--blue)}
 .cast-name{font-size:10.5px;font-weight:700;line-height:1.3}
-.cast-role{font:9px 'DM Mono';color:var(--muted);margin-top:2px}
+.cast-role{font:500 10px Montserrat;letter-spacing:.1px;color:var(--muted);margin-top:3px}
 .similar-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
 .similar-card{flex:none;width:110px;cursor:pointer}
 .similar-card img{width:110px;aspect-ratio:2/3;object-fit:cover;border-radius:7px;border:1px solid #ffffff0d;display:block;margin-bottom:7px;background:var(--panel2)}
