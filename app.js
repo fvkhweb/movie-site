@@ -26,6 +26,44 @@ const state = {
 
 const el = (id) => document.getElementById(id);
 
+/* ── Даты релиза ───────────────────────────────────── */
+
+// Фильм, до премьеры которого не больше месяца, ещё показываем в каталоге
+// с плашкой «Скоро в кино». Дальние премьеры (2027 и т.д.) живут только
+// в блоке «Скоро в кино», чтобы не забивать «Новинки».
+const SOON_DAYS = 30;
+const DAY_MS = 86400000;
+
+function todayISO() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Сколько дней осталось до премьеры: >0 — ещё не вышел, null — даты нет
+function daysUntilRelease(m) {
+  const raw = (m && m.release_date) || "";
+  if (!raw) return null;
+  const t = Date.parse(raw.slice(0, 10));
+  if (isNaN(t)) return null;
+  return Math.round((t - Date.parse(todayISO())) / DAY_MS);
+}
+
+function isUnreleased(m) {
+  const d = daysUntilRelease(m);
+  return d !== null && d > 0;
+}
+
+function isSoonRelease(m) {
+  const d = daysUntilRelease(m);
+  return d !== null && d > 0 && d <= SOON_DAYS;
+}
+
+function isFarUpcoming(m) {
+  const d = daysUntilRelease(m);
+  return d !== null && d > SOON_DAYS;
+}
+
 /* ── Утилиты ───────────────────────────────────────── */
 
 function escapeHtml(v) {
@@ -162,7 +200,9 @@ function fillControls() {
     .map((m) => parseInt(m.year, 10))
     .filter((y) => y > 1900);
   const minYear = Math.min(...years);
-  const maxYear = Math.max(...years);
+  // Годы в фильтре — только по текущий: анонсы 2027+ не должны
+  // предлагаться в выпадающих списках
+  const maxYear = Math.min(Math.max(...years), new Date().getFullYear());
 
   state.genres.forEach((g) => {
     const opt = document.createElement("option");
@@ -255,6 +295,9 @@ function filteredList() {
   }
 
   list = list.filter((m) => {
+    // Дальние премьеры не мешают каталогу: они живут в блоке «Скоро в кино».
+    // Исключение — явный поиск по названию: человек ищет конкретный фильм.
+    if (!q && isFarUpcoming(m)) return false;
     if (state.actor) return actorIds.has(m.id);
     if (genreExclude && (m.genres || []).includes(Number(genreExclude))) return false;
     if (genre && !(m.genres || []).includes(Number(genre))) return false;
@@ -310,7 +353,8 @@ function cardHtml(m, opts = {}) {
   const isFav = state.favorites.includes(m.id);
   const rating = m.rating ? Number(m.rating).toFixed(1) : "";
   const genreName = (state.genres.find((g) => g.id === (m.genres || [])[0]) || {}).name || "";
-  const sub = opts.date && m.release_date
+  const soon = isSoonRelease(m);
+  const sub = (opts.date || soon) && m.release_date
     ? `В КИНО ${fmtDateRu(m.release_date).toUpperCase()}`
     : [m.year || "", genreName ? genreName.toUpperCase() : ""].filter(Boolean).map(escapeHtml).join(" &nbsp;·&nbsp; ");
 
@@ -320,6 +364,7 @@ function cardHtml(m, opts = {}) {
       <img alt="${escapeAttr(m.title || "")}" loading="lazy" decoding="async"
            src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>
       ${rating ? `<span class="poster-rating">★ ${rating}</span>` : ""}
+      ${soon && !opts.date ? `<span class="poster-soon">СКОРО В КИНО</span>` : ""}
       <button class="heart ${isFav ? "saved" : ""}" data-id="${m.id}" aria-label="В избранное">${isFav ? "♥" : "♡"}</button>
     </div>
     <div class="movie-title">${escapeHtml(m.title || "Без названия")}</div>
@@ -537,7 +582,7 @@ function renderRailsPage() {
   if (!grid) return;
   const mode = state.railsMode;
   const info = RAIL_TITLES[mode];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   let list;
   if (mode === "soon") {
     const raw = (state.lists.upcoming || []).map(movieById).filter(Boolean);
@@ -614,7 +659,7 @@ function railCardHtml(m, opts = {}) {
 }
 
 function renderRails() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const now = (state.lists.now_playing || []).map(movieById).filter(Boolean);
   // «Скоро в кино» — только невышедшие, ближайшие первыми;
   // страховка от залежавшихся дат в данных. Анонсы без точной даты
@@ -747,6 +792,9 @@ function openModal(id) {
     .filter(Boolean)
     .map((name) => `<span class="chip">${escapeHtml(name)}</span>`)
     .join("");
+  const premiere = isUnreleased(m)
+    ? `ПРЕМЬЕРА ${escapeHtml(fmtDateRu(m.release_date).toUpperCase())}`
+    : "";
 
   const ratings = [
     m.rating ? `<span class="rating-pill"><span class="label">TMDB</span>⭐ ${Number(m.rating).toFixed(1)}</span>` : "",
@@ -803,6 +851,7 @@ function openModal(id) {
           : `<div class="poster-empty" style="width:200px;">Нет постера</div>`
       }
       <div class="movie-info">
+        ${premiere ? `<div class="tag">${premiere}</div>` : ""}
         <h2>${escapeHtml(m.title || "Без названия")}${m.year ? ` (${escapeHtml(m.year)})` : ""}</h2>
         <p class="movie-sub">${escapeHtml([m.original_title, (m.countries || []).join(", ")].filter(Boolean).join(" • "))}</p>
         <div class="ratings">${ratings}</div>
@@ -987,8 +1036,7 @@ function moviePageHtml(m) {
 
   // Плашка премьеры — только у ещё не вышедших фильмов;
   // у вышедших дата ни к чему (она есть в описании и фактах)
-  const unreleased = m.release_date && m.release_date.slice(0, 10) > new Date().toISOString().slice(0, 10);
-  const premiere = unreleased
+  const premiere = isUnreleased(m)
     ? `ПРЕМЬЕРА ${escapeHtml(fmtDateRu(m.release_date).toUpperCase())}`
     : "";
 

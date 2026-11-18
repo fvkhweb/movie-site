@@ -93,6 +93,7 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .movie:hover .poster img{transform:scale(1.045);filter:brightness(.8)}
 .poster:after{content:"";position:absolute;inset:50% 0 0;background:linear-gradient(transparent,rgba(0,0,0,.35));pointer-events:none}
 .poster-rating{position:absolute;z-index:1;top:10px;left:10px;background:rgba(9,11,15,.8);border:1px solid #ffffff24;border-radius:4px;padding:5px 7px;font:10px 'DM Mono';color:#dce5ff}
+.poster-soon{position:absolute;z-index:1;left:0;right:0;bottom:0;padding:7px 6px 6px;text-align:center;background:linear-gradient(transparent,rgba(9,11,15,.94));border-top:1px solid #7fa0ff4d;font:9px 'DM Mono';letter-spacing:1.2px;color:#cfe0ff;text-transform:uppercase}
 .heart{position:absolute;z-index:2;right:9px;top:9px;width:31px;height:31px;border-radius:50%;background:rgba(9,11,15,.75);border:1px solid #ffffff35;color:white;display:grid;place-items:center;font-size:13px;line-height:1}
 .heart.saved{color:#7fa0ff;border-color:var(--blue)}
 .movie-title{font-size:13px;font-weight:800;margin:11px 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
