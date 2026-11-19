@@ -45,44 +45,44 @@ val Montserrat = FontFamily(
     Font(R.font.montserrat_bold, FontWeight.W700),
 )
 
-/** Типографика приложения — Montserrat во всех стилях. */
+/** Типографика приложения — как на сайте: Unbounded для заголовков, Montserrat для текста. */
 object AppText {
     val brand = TextStyle(
-        fontFamily = Montserrat,
-        fontWeight = FontWeight.W800,
+        fontFamily = Unbounded,
+        fontWeight = FontWeight.W700,
         fontSize = 15.sp,
         letterSpacing = (-0.4).sp,
     )
     val display = TextStyle(
-        fontFamily = Montserrat,
+        fontFamily = Unbounded,
         fontWeight = FontWeight.W800,
         fontSize = 30.sp,
         lineHeight = 36.sp,
         letterSpacing = (-1.2).sp,
     )
     val h1 = TextStyle(
-        fontFamily = Montserrat,
+        fontFamily = Unbounded,
         fontWeight = FontWeight.W700,
         fontSize = 23.sp,
         lineHeight = 29.sp,
         letterSpacing = (-0.7).sp,
     )
     val h2 = TextStyle(
-        fontFamily = Montserrat,
+        fontFamily = Unbounded,
         fontWeight = FontWeight.W700,
         fontSize = 17.sp,
         lineHeight = 22.sp,
         letterSpacing = (-0.2).sp,
     )
     val section = TextStyle(
-        fontFamily = Montserrat,
-        fontWeight = FontWeight.W700,
+        fontFamily = Unbounded,
+        fontWeight = FontWeight.W600,
         fontSize = 14.sp,
         lineHeight = 19.sp,
         letterSpacing = 0.1.sp,
     )
     val cardTitle = TextStyle(
-        fontFamily = Montserrat,
+        fontFamily = Unbounded,
         fontWeight = FontWeight.W600,
         fontSize = 12.5.sp,
         lineHeight = 16.sp,
