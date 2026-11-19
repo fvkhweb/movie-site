@@ -29,6 +29,10 @@
 7. **`app/latest.json` руками не редактируется** — только `release.ps1`.
 8. **Людям отдаём только `app/WhatToWatch-<версия>.apk` или ссылку с Pages.**
    Debug-сборки (`app-debug.apk`) — только для локального теста, не для раздачи.
+9. **APK человеку отдаётся командой `android/give-apk.ps1`.** Она берёт файл
+   только из `app/`, проверяет его и копирует в `Downloads`. Путь
+   `android/app/build/outputs/apk/...` — это временные файлы Gradle, а не раздача:
+   оттуда ничего не отдаём и никому не называем.
 
 ## Карта репозитория
 
@@ -38,6 +42,7 @@
 | `android/version.properties` | Версия: `versionCode` / `versionName` |
 | `android/release.ps1` | Сборка и публикация релиза |
 | `android/check-release.ps1` | Проверка согласованности релиза |
+| `android/give-apk.ps1` | Выдать человеку APK актуального релиза (копия в Downloads) |
 | `android/keystore.properties` | Путь и пароли к ключу (в git не попадает) |
 | `android/signing-fingerprint.txt` | SHA-256 сертификата подписи |
 | `android/app/src/main/java/ru/fvkhweb/movies/data/update/` | Клиент автообновления |
@@ -65,6 +70,23 @@ cd movie-site\android
 
 Флаги: `-Force` — разрешить тот же/меньший `versionCode` (только для перепубликации),
 `-NoPush` — собрать и положить файлы без коммита.
+
+## Как отдать APK человеку
+
+```powershell
+cd movie-site\android
+.\give-apk.ps1              # копия в C:\Users\<юзер>\Downloads
+.\give-apk.ps1 -Dir D:\tmp  # копия в другую папку
+```
+
+Скрипт берёт **только** `app/WhatToWatch-<версия>.apk`, сверяет его с `latest.json`
+и `signing-fingerprint.txt`, и копирует с тем же именем. Если проверка не прошла —
+ничего не копирует.
+
+**Нельзя** отдавать `android/app/build/outputs/apk/debug/app-debug.apk` и любые файлы
+из `build/`: это промежуточные сборки Gradle. Debug-версия подписана другим ключом
+(в системе видна как `1.0.1-debug`), она не обновится до release и не встанет поверх
+установленного приложения.
 
 ## Контракт `app/latest.json`
 
@@ -106,6 +128,10 @@ cd movie-site\android
 .\gradlew.bat assembleDebug      # быстрая сборка для эмулятора
 .\gradlew.bat assembleRelease    # то, что уходит людям
 ```
+
+Debug-сборка имеет `versionName` с суффиксом `-debug` и подписана debug-ключом.
+Она годится только для эмулятора/локального теста: ставится через
+`adb install -r app\build\outputs\apk\debug\app-debug.apk`, людям не передаётся.
 
 - JDK 17, Android SDK 35, AGP 8.7.3, Gradle 8.9, Kotlin 2.0.21.
 - Путь с кириллицей требует `android.overridePathCheck=true` (уже в `gradle.properties`).

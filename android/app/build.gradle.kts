@@ -45,6 +45,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Debug-сборка сразу видна в системе: версия 1.0.1-debug, свой ключ.
+            // Раздавать её людям нельзя — обновления с ней не встанут.
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
