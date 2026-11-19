@@ -83,6 +83,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "git add не удался" }
     git commit -m "Релиз $name ($code)"
     if ($LASTEXITCODE -ne 0) { throw "Нечего коммитить или git недоступен" }
+    # данные сайта обновляются ботом — подтягиваем чужие коммиты перед пушем
+    git pull --rebase origin main
+    if ($LASTEXITCODE -ne 0) { throw "git pull --rebase не удался" }
     git push origin main
     if ($LASTEXITCODE -ne 0) { throw "Пуш не удался" }
 } finally {

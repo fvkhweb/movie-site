@@ -1,12 +1,11 @@
 {
-    "versionCode":  2,
-    "versionName":  "1.0.1",
-    "apkUrl":  "https://fvkhweb.github.io/movie-site/app/WhatToWatch-1.0.1.apk",
-    "sha256":  "6baa1bad15666779aea9c350ba469c352e4e21f8a832e389942418d056daed0a",
+    "versionCode":  3,
+    "versionName":  "1.0.2",
+    "apkUrl":  "https://fvkhweb.github.io/movie-site/app/WhatToWatch-1.0.2.apk",
+    "sha256":  "f8432d58113b019aa2b6cea1a6e3c762984a3589e2d86e4e238a3b2f3c2ed3ec",
     "size":  2738505,
     "notes":  [
-                  "Автообновление: приложение само сообщает о новых версиях",
-                  "Скачивание и установка обновления прямо из приложения"
+                  "Тестовая сборка: проверяем автообновление"
               ],
-    "publishedAt":  "2026-11-19T18:46:01Z"
+    "publishedAt":  "2026-11-19T18:50:03Z"
 }
