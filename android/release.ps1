@@ -25,10 +25,10 @@ $propsPath = Join-Path $androidDir "version.properties"
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Invoke-Git([string[]]$arguments) {
-    # git пишет предупреждения в stderr — не даём PowerShell превратить их в исключение
+    # git пишет предупреждения в stderr — подавляем stderr, проверяем только код возврата
     $previous = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & git @arguments
+    $null = & git @arguments 2>$null
     $code = $LASTEXITCODE
     $ErrorActionPreference = $previous
     return $code
