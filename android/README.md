@@ -30,14 +30,32 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 Или в Android Studio: **Open** → папка `android` → Run ▶.
 
-Для release-сборки нужен ключ:
+## Release и автообновление
 
-```bash
-./gradlew assembleRelease
+Release-сборка подписывается ключом из `android/keystore.properties` (в git не попадает,
+путь к файлу и пароли — там же). Без этого файла release соберётся debug-ключом.
+
+Версия хранится в `android/version.properties`.
+
+Выпуск обновления одной командой:
+
+```powershell
+cd android
+.\release.ps1 -VersionCode 3 -VersionName 1.1.0 -Notes "Что нового 1","Что нового 2"
 ```
 
-Подпись настраивается в `app/build.gradle.kts` (`signingConfigs`). Пока release собирается
-без ключа — для публикации в сторе его нужно добавить.
+Скрипт собирает release-APK, кладёт его и `app/latest.json` в корень репозитория,
+коммитит и пушит. GitHub Pages раздаёт файлы:
+
+- `https://fvkhweb.github.io/movie-site/app/latest.json`
+- `https://fvkhweb.github.io/movie-site/app/WhatToWatch-<версия>.apk`
+
+Приложение при запуске (не чаще раза в 6 часов) сравнивает `versionCode` из манифеста
+со своим и показывает диалог «Вышла обнова». Дальше — скачивание с прогрессом, проверка
+SHA-256 и подписи APK, запуск системного установщика.
+
+Первый раз на телефоне нужно разрешить установку из этого приложения (Android откроет
+нужный экран сам) и подтвердить «Всё равно установить» в Play Protect.
 
 ## Как это устроено
 
@@ -66,8 +84,9 @@ CatalogRepository ──► StateFlow<CatalogState> ──► MainViewModel ─�
 | `applicationId` (`ru.fvkhweb.movies`) | `app/build.gradle.kts` |
 | Название приложения | `app/src/main/res/values/strings.xml` |
 | Иконка | `app/src/main/res/drawable-nodpi/ic_launcher_foreground.png` |
-| Версия | `versionCode` / `versionName` в `app/build.gradle.kts` |
+| Версия | `versionCode` / `versionName` в `version.properties` |
 | Адрес данных | `Media.BASE` в `data/Media.kt` |
+| Адрес манифеста обновлений | `AppUpdater.MANIFEST_URL` в `data/update/AppUpdater.kt` |
 
 ## Ограничения
 
