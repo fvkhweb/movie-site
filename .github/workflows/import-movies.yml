@@ -1,0 +1,63 @@
+name: Import movies
+
+# Отдельный ручной импорт по десятилетиям.
+# Ежедневный update-movies.yml не трогает: популярное, «на слуху» и «скоро в кино»
+# продолжают собираться как раньше.
+
+on:
+  workflow_dispatch:
+    inputs:
+      import_limit:
+        description: "Сколько новых фильмов добавить"
+        required: false
+        default: "500"
+      decades:
+        description: "Десятилетия через запятую"
+        required: false
+        default: "1990,2000,2010,2020"
+      min_votes:
+        description: "Минимум голосов TMDB"
+        required: false
+        default: "200"
+      local_poster_votes:
+        description: "С какого числа голосов качать постер локально"
+        required: false
+        default: "500"
+      dry_run:
+        description: "Только отчёт, без записи в movies.json"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Import by decades
+        run: python scripts/import_movies.py
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          OMDB_API_KEY: ${{ secrets.OMDB_API_KEY }}
+          TASTEDIVE_API_KEY: ${{ secrets.TASTEDIVE_API_KEY }}
+          IMPORT_LIMIT: ${{ inputs.import_limit }}
+          IMPORT_DECADES: ${{ inputs.decades }}
+          IMPORT_MIN_VOTES: ${{ inputs.min_votes }}
+          IMPORT_LOCAL_POSTER_VOTES: ${{ inputs.local_poster_votes }}
+          OMDB_MAX_MOVIES: "500"
+          DRY_RUN: ${{ inputs.dry_run }}
+      - name: Commit imported movies
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/ posters/
+          git commit -m "import movies by decades" || exit 0
+          git push

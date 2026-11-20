@@ -1,0 +1,42 @@
+name: Backfill RU descriptions
+
+# Отдельный контур: постепенно заменяет английские описания на русские.
+# Ежедневный update-movies.yml не трогает.
+
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Сколько описаний попробовать обновить"
+        required: false
+        default: "150"
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: Backfill descriptions
+        run: python scripts/backfill_ru.py
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          POISKKINO_API_KEY: ${{ secrets.POISKKINO_API_KEY }}
+          KP_UNOFFICIAL_API_KEY: ${{ secrets.KP_UNOFFICIAL_API_KEY }}
+          RU_BACKFILL_LIMIT: ${{ inputs.limit || '150' }}
+      - name: Commit descriptions
+        run: |
+          git config user.name "bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/
+          git commit -m "backfill russian descriptions" || exit 0
+          git pull --rebase origin main
+          git push
