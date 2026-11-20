@@ -50,6 +50,7 @@ DRY_RUN = os.environ.get("DRY_RUN", "true").strip().lower() not in ("0", "false"
 
 DATA_DIR = os.environ.get("MOVIE_DATA_DIR", "data")
 MOVIES_PATH = os.path.join(DATA_DIR, "movies.json")
+IMPORT_LOG_DIR = os.environ.get("IMPORT_LOG_DIR", os.path.join("docs", "imports"))
 
 
 def load_movies():
@@ -57,11 +58,55 @@ def load_movies():
         return json.load(f)
 
 
-def save_movies_atomic(movies):
-    tmp = MOVIES_PATH + ".tmp"
+def save_json_atomic(path, data):
+    tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(movies, f, ensure_ascii=False)
-    os.replace(tmp, MOVIES_PATH)
+        json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def save_movies_atomic(movies):
+    save_json_atomic(MOVIES_PATH, movies)
+
+
+def update_cast_people(movies):
+    """Дописывает актёров новых фильмов в cast.json и people.json."""
+    cast_path = os.path.join(DATA_DIR, "cast.json")
+    people_path = os.path.join(DATA_DIR, "people.json")
+    try:
+        with open(cast_path, encoding="utf-8") as f:
+            cast_map = json.load(f)
+    except Exception:
+        cast_map = {}
+    try:
+        with open(people_path, encoding="utf-8") as f:
+            people = json.load(f)
+    except Exception:
+        people = []
+
+    people_by_key = {str(p.get("id") or p.get("name")): p for p in people}
+    for movie in movies:
+        items = movie.get("cast") or []
+        if not items:
+            continue
+        cast_map[str(movie["id"])] = items
+        for c in items:
+            key = str(c.get("id") or c.get("name"))
+            person = people_by_key.get(key)
+            if not person:
+                person = {
+                    "id": c.get("id") or 0,
+                    "name": c.get("name", ""),
+                    "photo": c.get("photo") or "",
+                    "movies": [],
+                }
+                people.append(person)
+                people_by_key[key] = person
+            if movie["id"] not in person["movies"]:
+                person["movies"].append(movie["id"])
+
+    save_json_atomic(cast_path, cast_map)
+    save_json_atomic(people_path, people)
 
 
 def decade_ranges():
@@ -370,6 +415,26 @@ def apply_posters(movies, download=True):
                     movie["poster_fallback"] = fm.IMG_SOURCES[0] + poster_path
 
 
+def write_import_log(movies, started, decades):
+    folder = IMPORT_LOG_DIR
+    os.makedirs(folder, exist_ok=True)
+    day = started.strftime("%Y-%m-%d")
+    path = os.path.join(folder, f"{day}.md")
+    new_file = not os.path.exists(path)
+    with open(path, "a", encoding="utf-8") as f:
+        if new_file:
+            f.write(f"# Импорт фильмов — {day}\n\n")
+        f.write(f"## {started.strftime('%H:%M')} UTC\n\n")
+        f.write(f"- Десятилетия: {', '.join(f'{d}-е' for d in decades)}\n")
+        f.write(f"- Добавлено: {len(movies)}\n\n")
+        f.write("| # | Фильм | Год | Рейтинг |\n|---:|---|---:|---:|\n")
+        for i, movie in enumerate(movies, 1):
+            title = (movie.get("title") or "").replace("|", "\\|")
+            rating = movie.get("rating") or "—"
+            f.write(f"| {i} | {title} | {movie.get('year') or ''} | {rating} |\n")
+        f.write("\n")
+
+
 def run():
     if IMPORT_LIMIT <= 0:
         print("Импорт выключен: IMPORT_LIMIT=0")
@@ -378,6 +443,7 @@ def run():
         print("Нет TMDB_API_KEY")
         return 1
 
+    started = datetime.datetime.now(datetime.timezone.utc)
     movies = load_movies()
     existing_ids = {m["id"] for m in movies}
     print(f"Импорт: цель {IMPORT_LIMIT}, десятилетия {IMPORT_DECADES}, dry-run={DRY_RUN}")
@@ -452,9 +518,22 @@ def run():
         print("Нечего добавлять")
         return 0
 
+    added_at = datetime.date.today().isoformat()
+    for movie in valid:
+        movie["added_at"] = added_at
     movies.extend(valid)
     save_movies_atomic(movies)
     print(f"Добавлено в movies.json: {len(valid)}, всего теперь {len(movies)}")
+    try:
+        update_cast_people(valid)
+        print("Актёры обновлены")
+    except Exception as e:
+        print(f"  актёры: {e}")
+    try:
+        write_import_log(valid, started, IMPORT_DECADES)
+        print(f"Лог импорта: {IMPORT_LOG_DIR}/{started.strftime('%Y-%m-%d')}.md")
+    except Exception as e:
+        print(f"  лог импорта: {e}")
     return 0
 
 

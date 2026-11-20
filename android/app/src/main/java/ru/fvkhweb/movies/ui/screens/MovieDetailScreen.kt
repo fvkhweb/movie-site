@@ -100,7 +100,7 @@ fun MovieDetailScreen(
     }
 
     val isFavorite = movie.id in favorites
-    val cast = state.castOf(movie.id)
+    val cast = state.castOf(movie.id).ifEmpty { movie.cast }
     val similar = remember(movie.similar, state.moviesById) {
         movie.similar.mapNotNull { state.moviesById[it] }.take(10)
     }

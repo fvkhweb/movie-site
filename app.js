@@ -5,7 +5,7 @@
 const PAGE_SIZE = window.matchMedia("(max-width: 650px)").matches ? 30 : 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "10"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "11"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 const PIXEL =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
@@ -1054,7 +1054,7 @@ function openModal(id) {
     m.runtime ? `<span class="rating-pill"><span class="label">Время</span>${runtimeLabel(m.runtime)}</span>` : "",
   ].filter(Boolean).join("");
 
-  const cast = (state.cast && state.cast[String(m.id)]) || [];
+  const cast = (state.cast && state.cast[String(m.id)]) || m.cast || [];
   const castHtml = cast.length
     ? `<div class="cast-section"><h3>В главных ролях</h3><div class="cast-row">${cast
         .map(
@@ -1245,7 +1245,7 @@ function moviePageHtml(m) {
     m.runtime ? `<span class="rating-pill"><span class="label">Время</span><span class="val">${runtimeLabel(m.runtime)}</span></span>` : "",
   ].filter(Boolean).join("");
 
-  const cast = (state.cast && state.cast[String(m.id)]) || [];
+  const cast = (state.cast && state.cast[String(m.id)]) || m.cast || [];
   const castHtml = cast.length
     ? `<div class="cast-section"><h3>В главных ролях</h3><div class="cast-row">${cast
         .map(

@@ -26,6 +26,7 @@ data class Movie(
     val poster: String? = null,
     @SerialName("poster_fallback") val posterFallback: String? = null,
     val facts: List<String> = emptyList(),
+    val cast: List<CastMember> = emptyList(),
     // "kp" — карточка из Кинопоиска: живёт только в каталоге,
     // на главную (рейтинги TMDB) не попадает.
     val source: String? = null,
