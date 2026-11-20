@@ -691,12 +691,14 @@ function jumpTo(target) {
 function renderFeature() {
   const feature = el("feature");
   if (!feature || !state.movies.length) return;
+  // Кинопоиск добавляем только в каталог: главная — по рейтингам TMDB.
+  const films = state.movies.filter((m) => m.source !== "kp");
   // Если у популярных фильмов есть кадры с Кинопоиска (Яндекс.CDN) —
   // показываем фильм с кадром: он ландшафтный и красиво заполняет блок
-  const withFrame = state.movies.filter((m) => m.frame && movieDescription(m) && m.rating);
+  const withFrame = films.filter((m) => m.frame && movieDescription(m) && m.rating);
   const pool = withFrame.length
     ? withFrame
-    : state.movies.filter((m) => movieDescription(m) && m.rating);
+    : films.filter((m) => movieDescription(m) && m.rating);
   if (!pool.length) return;
   const m = pool.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
 

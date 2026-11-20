@@ -105,10 +105,12 @@ fun HomeScreen(
     }
 
     val movies = state.movies
-    val popular = remember(movies) {
-        movies.sortedWith(compareByDescending<Movie> { it.popularity ?: 0.0 }).take(18)
+    // Кинопоиск добавляется только в каталог: на главной — фильмы TMDB.
+    val homeMovies = remember(movies) { movies.filter { it.source != "kp" } }
+    val popular = remember(homeMovies) {
+        homeMovies.sortedWith(compareByDescending<Movie> { it.popularity ?: 0.0 }).take(18)
     }
-    val featured = remember(movies) { pickFeatured(movies) }
+    val featured = remember(homeMovies) { pickFeatured(homeMovies) }
 
     val genreCounts = remember(movies, state.genres) {
         val counts = HashMap<Int, Int>()

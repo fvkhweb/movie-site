@@ -23,7 +23,6 @@ IMG_MIRROR = "https://wsrv.nl/?url=image.tmdb.org/t/p/" + IMG_SIZE
 KP_BASE = "https://api.kinopoisk.dev/v1.4/movie"
 # Пул ключей: в секрет можно вписать несколько через запятую
 KP_DEV_KEYS = [k.strip() for k in os.environ.get("POISKKINO_API_KEY", "").replace(";", ",").split(",") if k.strip()]
-KP_HEADERS = {"X-API-KEY": KP_DEV_KEYS[0] if KP_DEV_KEYS else ""}
 # У бесплатного тарифа ~200 запросов/сутки, по 2 на фильм; запас — 90 фильмов на ключ
 KP_MAX_MOVIES = int(os.environ.get("KP_MAX_MOVIES", str(90 * max(1, len(KP_DEV_KEYS)))))
 
@@ -34,7 +33,54 @@ KPU_API_KEYS = [k.strip() for k in os.environ.get("KP_UNOFFICIAL_API_KEY", "").r
 KPU_ROOT = "https://kinopoiskapiunofficial.tech/api"
 # ~120 фильмов на ключ (поиск + детали + кадры)
 UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", str(120 * max(1, len(KPU_API_KEYS)))))
-KPU_STATE = {"idx": 0, "exhausted": set(), "premium_logged": set()}
+KPU_PREMIUM_LOGGED = set()
+
+# ── Импорт каталога из Кинопоиска ──────────────────────────────
+# 0 — импорт выключен. Для теста запускать workflow вручную с import_limit=1000.
+KP_IMPORT_LIMIT = int(os.environ.get("KP_IMPORT_LIMIT", "0"))
+KP_IMPORT_SOURCE = os.environ.get("KP_IMPORT_SOURCE", "auto").strip().lower()
+KP_IMPORT_RATING_FROM = float(os.environ.get("KP_IMPORT_RATING_FROM", "6.0"))
+KP_IMPORT_VOTES_FROM = int(os.environ.get("KP_IMPORT_VOTES_FROM", "200"))
+KP_IMPORT_YEAR_FROM = int(os.environ.get("KP_IMPORT_YEAR_FROM", "1950"))
+KP_IMPORT_YEAR_TO = int(os.environ.get("KP_IMPORT_YEAR_TO", str(datetime.date.today().year)))
+# KP-ID живут в отдельном диапазоне, чтобы не пересекаться с TMDB-ID.
+KP_ID_OFFSET = 1_000_000_000
+KP_FRAME_MAX = int(os.environ.get("KP_FRAME_MAX", "200"))
+KP_STATE_FILE = "data/kp_state.json"
+KP_COOLDOWN_DAYS = {
+    "not_found": int(os.environ.get("KP_COOLDOWN_NOT_FOUND_DAYS", "14")),
+    "no_facts": int(os.environ.get("KP_COOLDOWN_NO_FACTS_DAYS", "14")),
+    "no_frame": int(os.environ.get("KP_COOLDOWN_NO_FRAME_DAYS", "14")),
+    "error": int(os.environ.get("KP_COOLDOWN_ERROR_DAYS", "1")),
+}
+
+# Соответствие жанров Кинопоиска жанрам TMDB, которые уже есть в genres.json.
+KP_GENRE_MAP = {
+    "боевик": 28,
+    "приключения": 12,
+    "мультфильм": 16,
+    "комедия": 35,
+    "криминал": 80,
+    "документальный": 99,
+    "драма": 18,
+    "семейный": 10751,
+    "фэнтези": 14,
+    "история": 36,
+    "ужасы": 27,
+    "музыка": 10402,
+    "детектив": 9648,
+    "мелодрама": 10749,
+    "фантастика": 878,
+    "телевизионный фильм": 10770,
+    "триллер": 53,
+    "военный": 10752,
+    "вестерн": 37,
+    # Этих жанров нет в TMDB отдельными id — кладём в ближайший.
+    "биография": 36,
+    "спорт": 18,
+    "аниме": 16,
+    "короткометражка": 18,
+}
 
 POPULAR_PAGES = int(os.environ.get("POPULAR_PAGES", "20"))
 TOP_PAGES = int(os.environ.get("TOP_PAGES", "20"))
@@ -47,6 +93,93 @@ TEST_LIMIT = int(os.environ.get("LIMIT_MOVIES", "0"))  # >0 — только д�
 
 session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0"})
+
+
+def mask_key(key):
+    key = key or ""
+    if len(key) <= 8:
+        return key[:2] + "…"
+    return key[:4] + "…" + key[-4:]
+
+
+class KeyPool:
+    """Пул ключей с round-robin и счётчиками запросов.
+
+    Раньше код брал первый ключ и переключался на следующий только при
+    исчерпании лимита. Из-за этого второй и третий ключи могли неделями
+    показывать 0 запросов. Теперь ключи идут по кругу, а исчерпанные/битые
+    временно исключаются из rotation.
+    """
+
+    def __init__(self, name, keys, exhaust_codes, invalid_codes=(401,)):
+        self.name = name
+        self.keys = list(keys)
+        self.exhaust_codes = set(exhaust_codes)
+        self.invalid_codes = set(invalid_codes)
+        self._next = 0
+        self.exhausted = set()
+        self.invalid = set()
+        self.requests = [0] * len(self.keys)
+        self.success = [0] * len(self.keys)
+        self.errors = [0] * len(self.keys)
+        self.last_response = None
+
+    def log_start(self):
+        if not self.keys:
+            print(f"{self.name}: ключей нет — источник выключен")
+            return
+        print(f"{self.name}: ключей {len(self.keys)}")
+        for i, key in enumerate(self.keys):
+            print(f"  #{i + 1}: {mask_key(key)}")
+
+    def request(self, do_request):
+        if not self.keys:
+            return None
+        n = len(self.keys)
+        for offset in range(n):
+            idx = (self._next + offset) % n
+            if idx in self.exhausted or idx in self.invalid:
+                continue
+            self.requests[idx] += 1
+            try:
+                r = do_request(self.keys[idx])
+            except Exception as e:
+                self.errors[idx] += 1
+                print(f"  {self.name} #{idx + 1}: {e}")
+                continue
+            if r is None:
+                self.errors[idx] += 1
+                continue
+            self.last_response = r
+            if r.status_code in self.invalid_codes:
+                self.invalid.add(idx)
+                self.errors[idx] += 1
+                print(f"  {self.name} #{idx + 1}: HTTP {r.status_code} — ключ отключён")
+                continue
+            if r.status_code in self.exhaust_codes:
+                self.exhausted.add(idx)
+                print(f"  {self.name} #{idx + 1}: HTTP {r.status_code} — лимит, переключаюсь")
+                continue
+            self._next = (idx + 1) % n
+            self.success[idx] += 1
+            return r
+        # Все ключи исчерпаны/отключены — отдаём последний ответ, чтобы
+        # вызывающий код мог залогировать HTTP-статус.
+        return self.last_response
+
+    def log_stats(self):
+        if not self.keys:
+            print(f"{self.name}: запросов нет")
+            return
+        parts = [
+            f"#{i + 1}={self.requests[i]} запр./{self.success[i]} ок/{self.errors[i]} ош"
+            for i in range(len(self.keys))
+        ]
+        print(f"{self.name}: " + ", ".join(parts))
+
+
+KPU_POOL = KeyPool("КП-Unofficial", KPU_API_KEYS, {402, 429})
+DEV_POOL = KeyPool("КП-dev", KP_DEV_KEYS, {402, 429, 403})
 
 
 def tmdb_get(path, params=None):
@@ -255,7 +388,7 @@ def get_kp_unofficial(title, year, original_title=""):
                     402: "лимит ключа исчерпан",
                     403: "метод недоступен на тарифе"}.get(r.status_code if r else 0, "")
             print(f"  КП-Unofficial поиск '{title}': HTTP {r.status_code if r else 'нет ключей'} {hint}")
-            return None
+            return {"error": True}
 
         data = r.json()
         films = data.get("films") or data.get("items") or []
@@ -298,21 +431,8 @@ def get_kp_unofficial(title, year, original_title=""):
             poster = details_data.get("posterUrl") or poster
             rating = details_data.get("ratingKinopoisk") or rating
 
-        facts = []
         time.sleep(0.2)
-        for ver in ("v2.2", "v2.1"):
-            fr = kpu_get(f"{ver}/films/{film_id}/facts")
-            if fr is None:
-                break
-            if fr.status_code == 200:
-                items = fr.json().get("items") or []
-                facts = [
-                    html_mod.unescape(re.sub(r"<[^>]+>", "", i.get("text") or "")).strip()
-                    for i in items
-                    if i.get("text")
-                ][:3]
-                if facts:
-                    break
+        facts = get_kp_facts(film_id)
         return {
             "poster": poster,
             "description": description,
@@ -322,38 +442,53 @@ def get_kp_unofficial(title, year, original_title=""):
         }
     except Exception as e:
         print(f"  КП-Unofficial ошибка для '{title}': {e}")
+        return {"error": True}
     return None
 
 
 def kpu_get(path, params=None):
-    """Запрос к Kinopoisk Unofficial с ротацией ключей.
-    402/429 — лимит ключа: переключаемся на следующий.
-    403 — метод недоступен на тарифе: просто пропускаем (ключ не тратим)."""
+    """Запрос к Kinopoisk Unofficial с round-robin по ключам.
+
+    402/429 — лимит ключа: исключаем его до конца прогона.
+    403 — метод недоступен на тарифе: это ответ, а не проблема ключа,
+    поэтому ключ не отключаем.
+    """
     if not KPU_API_KEYS:
         return None
 
-    while True:
-        idx = KPU_STATE["idx"]
-        try:
-            r = session.get(f"{KPU_ROOT}/{path}", headers={"X-API-KEY": KPU_API_KEYS[idx]},
-                            params=params, timeout=15)
-        except Exception as e:
-            print(f"  КП-Unofficial {path}: {e}")
-            return None
+    def do_request(key):
+        return session.get(
+            f"{KPU_ROOT}/{path}",
+            headers={"X-API-KEY": key},
+            params=params,
+            timeout=15,
+        )
 
-        if r.status_code in (402, 429):
-            KPU_STATE["exhausted"].add(idx)
-            rest = [i for i in range(len(KPU_API_KEYS)) if i not in KPU_STATE["exhausted"]]
-            if not rest:
-                print(f"  КП-Unofficial: все ключи исчерпаны")
-                return r
-            KPU_STATE["idx"] = rest[0]
-            continue
+    r = KPU_POOL.request(do_request)
+    if r is not None and r.status_code == 403 and "premium" not in KPU_PREMIUM_LOGGED:
+        KPU_PREMIUM_LOGGED.add("premium")
+        print("  КП-Unofficial: метод недоступен на бесплатном тарифе (403)")
+    return r
 
-        if r.status_code == 403 and "premium" not in KPU_STATE["premium_logged"]:
-            KPU_STATE["premium_logged"].add("premium")
-            print("  КП-Unofficial: метод недоступен на бесплатном тарифе (403)")
-        return r
+
+def get_kp_facts(kp_id):
+    """Факты по известному id Кинопоиска — без поиска и деталей."""
+    if not KPU_API_KEYS or not kp_id:
+        return []
+    for ver in ("v2.2", "v2.1"):
+        fr = kpu_get(f"{ver}/films/{kp_id}/facts")
+        if fr is None:
+            return []
+        if fr.status_code == 200:
+            items = fr.json().get("items") or []
+            facts = [
+                html_mod.unescape(re.sub(r"<[^>]+>", "", i.get("text") or "")).strip()
+                for i in items
+                if i.get("text")
+            ][:3]
+            if facts:
+                return facts
+    return []
 
 
 def get_kp_frame(kp_id):
@@ -393,29 +528,23 @@ def get_trailer(movie_id):
 
 
 # Пул ключей для kinopoisk.dev с ротацией при исчерпании лимита
-DEV_STATE = {"idx": 0, "exhausted": set()}
-
-
 def kp_dev_get(path, params=None):
+    """Запрос к kinopoisk.dev с round-robin по ключам.
+
+    У kinopoisk.dev 403 = лимит исчерпан, 401 = неверный ключ.
+    """
     if not KP_DEV_KEYS:
         return None
-    while True:
-        idx = DEV_STATE["idx"]
-        try:
-            r = session.get(f"{KP_BASE}{path}", headers={"X-API-KEY": KP_DEV_KEYS[idx]},
-                            params=params, timeout=15)
-        except Exception as e:
-            print(f"  КП-dev {path}: {e}")
-            return None
-        if r.status_code in (402, 429, 403) and len(KP_DEV_KEYS) > 1:
-            # У kinopoisk.dev 403 = лимит исчерпан; 401 = неверный ключ (не ротируем)
-            rest = [i for i in range(len(KP_DEV_KEYS)) if i not in DEV_STATE["exhausted"]]
-            if not rest:
-                return r
-            DEV_STATE["exhausted"].add(idx)
-            DEV_STATE["idx"] = rest[0]
-            continue
-        return r
+
+    def do_request(key):
+        return session.get(
+            f"{KP_BASE}{path}",
+            headers={"X-API-KEY": key},
+            params=params,
+            timeout=15,
+        )
+
+    return DEV_POOL.request(do_request)
 
 
 def get_kp_data(title, year, original_title=""):
@@ -430,7 +559,7 @@ def get_kp_data(title, year, original_title=""):
         r = kp_dev_get("/search", params)
         if r is None or r.status_code != 200:
             print(f"  КП поиск '{title}': HTTP {r.status_code if r else 'нет ключей'}")
-            return None
+            return {"error": True}
 
         docs = r.json().get("docs", [])
         if not docs:
@@ -460,6 +589,7 @@ def get_kp_data(title, year, original_title=""):
                 "poster": poster,
                 "description": movie.get("description"),
                 "kp_rating": (movie.get("rating") or {}).get("kp"),
+                "kp_id": kp_id,
             }
 
         details = d_resp.json()
@@ -472,6 +602,7 @@ def get_kp_data(title, year, original_title=""):
         }
     except Exception as e:
         print(f"  КП ошибка для '{title}': {e}")
+        return {"error": True}
     return None
 
 
@@ -526,7 +657,388 @@ def get_en_overview(movie_id):
     return (details.get("overview") or "").strip()
 
 
+# ── Состояние Кинопоиска: cooldown повторных попыток ─────────────
+
+def load_kp_state():
+    try:
+        with open(KP_STATE_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get("films"), dict):
+            return data
+    except Exception:
+        pass
+    return {"version": 1, "films": {}}
+
+
+def save_kp_state(state):
+    os.makedirs("data", exist_ok=True)
+    with open(KP_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False)
+
+
+def kp_state_key(movie, status):
+    # Один фильм может ждать сразу несколько задач: поиск, факты, кадр.
+    # Ключ с задачей не даёт успеху в одной задаче сбросить cooldown другой.
+    return f"{movie.get('id')}:{status}"
+
+
+def kp_should_skip(state, movie, status):
+    entry = state.get("films", {}).get(kp_state_key(movie, status))
+    if not entry:
+        return False
+    try:
+        last = datetime.date.fromisoformat(str(entry.get("last_try"))[:10])
+    except Exception:
+        return False
+    return (datetime.date.today() - last).days < KP_COOLDOWN_DAYS.get(status, 0)
+
+
+def kp_mark(state, movie, status):
+    state.setdefault("films", {})[kp_state_key(movie, status)] = {
+        "last_try": datetime.date.today().isoformat(),
+    }
+
+
+def kp_clear(state, movie, status):
+    state.setdefault("films", {}).pop(kp_state_key(movie, status), None)
+
+
+def prune_kp_state(state, movies):
+    valid = {str(m.get("id")) for m in movies}
+    state["films"] = {
+        key: value for key, value in state.get("films", {}).items()
+        if key.split(":", 1)[0] in valid
+    }
+
+
+# ── Импорт каталога из Кинопоиска ────────────────────────────────
+
+def clean_text(value):
+    if not value:
+        return ""
+    return html_mod.unescape(re.sub(r"<[^>]+>", " ", str(value))).strip()
+
+
+def norm_year(value):
+    try:
+        year = int(str(value)[:4])
+    except (TypeError, ValueError):
+        return None
+    if 1880 <= year <= datetime.date.today().year + 5:
+        return year
+    return None
+
+
+def kp_genres(items):
+    result = []
+    for item in items or []:
+        name = item.get("name") if isinstance(item, dict) else item
+        gid = KP_GENRE_MAP.get(str(name or "").strip().lower())
+        if gid and gid not in result:
+            result.append(gid)
+    return result
+
+
+def kp_countries(items):
+    result = []
+    for item in items or []:
+        name = item.get("name") if isinstance(item, dict) else item
+        if isinstance(item, dict):
+            name = name or item.get("country")
+        name = str(name or "").strip()
+        if name and name not in result:
+            result.append(name)
+    return result
+
+
+def kp_release_date(premiere, year):
+    if isinstance(premiere, dict):
+        for key in ("world", "russia", "digital", "dvd", "bluRay"):
+            value = premiere.get(key)
+            if value:
+                return str(value)[:10]
+    return f"{year}-01-01" if year else ""
+
+
+def kp_pseudo_popularity(rating, votes):
+    """Псевдо-popularity для сортировки каталога.
+
+    KP-фильмы не должны лезть в топ главной (там TMDB), поэтому значение
+    держим в диапазоне примерно 0–50, ниже топовых TMDB-фильмов.
+    """
+    try:
+        rating = float(rating or 0)
+        votes = float(votes or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if rating <= 0:
+        return 0.0
+    return round(rating * (1 + min(4.0, (votes / 10000.0) ** 0.5)), 1)
+
+
+def index_movie(index, movie):
+    year = norm_year(movie.get("year") or (movie.get("release_date") or "")[:4])
+    if not year:
+        return
+    for title in (movie.get("title"), movie.get("original_title")):
+        normalized = norm_title(title)
+        if normalized:
+            index.add((normalized, year))
+
+
+def build_existing_index(movies):
+    index = set()
+    for movie in movies:
+        index_movie(index, movie)
+    return index
+
+
+def is_duplicate(movie, index):
+    year = norm_year(movie.get("year") or (movie.get("release_date") or "")[:4])
+    if not year:
+        return False
+    for title in (movie.get("title"), movie.get("original_title")):
+        normalized = norm_title(title)
+        if not normalized:
+            continue
+        if any((normalized, y) in index for y in (year - 1, year, year + 1)):
+            return True
+    return False
+
+
+def kp_doc_to_movie(doc):
+    """Карточка kinopoisk.dev -> наша схема movies.json."""
+    kp_id = doc.get("id")
+    if not kp_id:
+        return None
+    year = norm_year(doc.get("year"))
+    title = clean_text(doc.get("name")) or clean_text(doc.get("alternativeName")) or clean_text(doc.get("enName"))
+    if not title:
+        return None
+    poster = (doc.get("poster") or {}).get("url") or ""
+    preview = (doc.get("poster") or {}).get("previewUrl") or poster
+    if not poster:
+        return None
+    rating = (doc.get("rating") or {}).get("kp")
+    votes = (doc.get("votes") or {}).get("kp")
+    try:
+        rating = round(float(rating), 1) if rating is not None else 0
+    except (TypeError, ValueError):
+        rating = 0
+    try:
+        runtime = int(doc.get("movieLength") or 0)
+    except (TypeError, ValueError):
+        runtime = 0
+    return {
+        "id": KP_ID_OFFSET + int(kp_id),
+        "source": "kp",
+        "kp_id": int(kp_id),
+        "title": title,
+        "original_title": clean_text(doc.get("alternativeName")) or clean_text(doc.get("enName")) or "",
+        "year": str(year) if year else "",
+        "release_date": kp_release_date(doc.get("premiere"), year),
+        "rating": rating,
+        "kp_rating": rating,
+        "popularity": kp_pseudo_popularity(rating, votes),
+        "runtime": runtime,
+        "genres": kp_genres(doc.get("genres") or []),
+        "countries": kp_countries(doc.get("countries") or []),
+        "description": clean_text(doc.get("description")) or clean_text(doc.get("shortDescription")),
+        "poster": poster,
+        "poster_fallback": preview if preview != poster else "",
+    }
+
+
+def kpu_item_to_movie(item):
+    """Карточка Kinopoisk Unofficial -> наша схема movies.json."""
+    kp_id = item.get("kinopoiskId") or item.get("filmId")
+    if not kp_id:
+        return None
+    year = norm_year(item.get("year"))
+    title = clean_text(item.get("nameRu")) or clean_text(item.get("nameOriginal")) or clean_text(item.get("nameEn"))
+    if not title:
+        return None
+    poster = item.get("posterUrl") or item.get("posterUrlPreview") or ""
+    preview = item.get("posterUrlPreview") or poster
+    if not poster:
+        return None
+    rating = item.get("ratingKinopoisk") or item.get("rating")
+    votes = item.get("ratingKinopoiskVoteCount") or item.get("ratingVoteCount")
+    try:
+        rating = round(float(rating), 1) if rating is not None else 0
+    except (TypeError, ValueError):
+        rating = 0
+    release = item.get("premiereRu") or item.get("premiereWorld") or ""
+    return {
+        "id": KP_ID_OFFSET + int(kp_id),
+        "source": "kp",
+        "kp_id": int(kp_id),
+        "title": title,
+        "original_title": clean_text(item.get("nameOriginal")) or clean_text(item.get("nameEn")) or "",
+        "year": str(year) if year else "",
+        "release_date": str(release)[:10] if release else (f"{year}-01-01" if year else ""),
+        "rating": rating,
+        "kp_rating": rating,
+        "popularity": kp_pseudo_popularity(rating, votes),
+        "runtime": 0,
+        "genres": kp_genres(item.get("genres") or []),
+        "countries": kp_countries(item.get("countries") or []),
+        "description": clean_text(item.get("description")) or clean_text(item.get("shortDescription")),
+        "poster": poster,
+        "poster_fallback": preview if preview != poster else "",
+    }
+
+
+def import_from_dev(limit, index):
+    if not KP_DEV_KEYS or limit <= 0:
+        return []
+    rating_from = KP_IMPORT_RATING_FROM
+    votes_from = KP_IMPORT_VOTES_FROM
+    queries = [
+        {
+            "sortField": "rating.kp", "sortType": "-1",
+            "rating.kp": f"{rating_from}-10", "votes.kp": f"{votes_from}-100000000",
+            "year": f"{KP_IMPORT_YEAR_FROM}-{KP_IMPORT_YEAR_TO}",
+        },
+        {
+            "sortField": "votes.kp", "sortType": "-1",
+            "rating.kp": f"{rating_from}-10", "votes.kp": f"{votes_from * 5}-100000000",
+            "year": f"{KP_IMPORT_YEAR_FROM}-{KP_IMPORT_YEAR_TO}",
+        },
+        {
+            "countries.name": "Россия", "sortField": "rating.kp", "sortType": "-1",
+            "rating.kp": f"{max(5.0, rating_from - 0.5)}-10",
+            "votes.kp": f"{max(50, votes_from // 2)}-100000000",
+            "year": f"{KP_IMPORT_YEAR_FROM}-{KP_IMPORT_YEAR_TO}",
+        },
+    ]
+    result = []
+    seen = set()
+    for query in queries:
+        page = 1
+        while len(result) < limit:
+            params = {
+                "page": page,
+                "limit": 250,
+                "selectFields": "id,name,alternativeName,enName,year,description,"
+                                "shortDescription,movieLength,rating,votes,genres,"
+                                "countries,poster,premiere",
+                "notNullFields": "poster.url",
+                "type": "movie",
+                **query,
+            }
+            r = kp_dev_get("/movie", params)
+            if r is None or r.status_code != 200:
+                print(f"  КП-dev импорт: HTTP {r.status_code if r else 'нет ответа'}")
+                break
+            data = r.json()
+            docs = data.get("docs") or []
+            if not docs:
+                break
+            for doc in docs:
+                if len(result) >= limit:
+                    break
+                movie = kp_doc_to_movie(doc)
+                if not movie or movie["id"] in seen:
+                    continue
+                seen.add(movie["id"])
+                # Уже известные фильмы не считаем: иначе повторный импорт
+                # упрётся в первую страницу и не добавит ничего нового.
+                if is_duplicate(movie, index):
+                    continue
+                result.append(movie)
+                index_movie(index, movie)
+            pages = data.get("pages") or 0
+            print(f"  КП-dev импорт: страница {page}/{pages or '?'}, всего {len(result)}")
+            if pages and page >= pages:
+                break
+            page += 1
+            time.sleep(0.2)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def import_from_unofficial(limit, index):
+    if not KPU_API_KEYS or limit <= 0:
+        return []
+    result = []
+    seen = set()
+    page = 1
+    while len(result) < limit:
+        params = {
+            "order": "RATING",
+            "type": "FILM",
+            "ratingFrom": KP_IMPORT_RATING_FROM,
+            "ratingTo": 10,
+            "yearFrom": KP_IMPORT_YEAR_FROM,
+            "yearTo": KP_IMPORT_YEAR_TO,
+            "page": page,
+        }
+        r = kpu_get("v2.2/films", params)
+        if r is None or r.status_code != 200:
+            print(f"  КП-Unofficial импорт: HTTP {r.status_code if r else 'нет ответа'}")
+            break
+        data = r.json()
+        items = data.get("items") or data.get("films") or []
+        if not items:
+            break
+        for item in items:
+            if len(result) >= limit:
+                break
+            movie = kpu_item_to_movie(item)
+            if not movie or movie["id"] in seen:
+                continue
+            seen.add(movie["id"])
+            # Unofficial не умеет фильтровать по голосам — отсекаем сами,
+            # иначе в базу попадёт малоизвестный фильм с парой оценок.
+            if (movie.get("rating") or 0) < KP_IMPORT_RATING_FROM:
+                continue
+            votes = item.get("ratingKinopoiskVoteCount") or item.get("ratingVoteCount") or 0
+            try:
+                votes = int(votes)
+            except (TypeError, ValueError):
+                votes = 0
+            if votes < KP_IMPORT_VOTES_FROM:
+                continue
+            if is_duplicate(movie, index):
+                continue
+            result.append(movie)
+            index_movie(index, movie)
+        total_pages = data.get("totalPages") or 0
+        print(f"  КП-Unofficial импорт: страница {page}/{total_pages or '?'}, всего {len(result)}")
+        if total_pages and page >= total_pages:
+            break
+        page += 1
+        time.sleep(0.2)
+    return result
+
+
+def import_kp_movies(existing, limit):
+    if limit <= 0:
+        return []
+    print(f"КП-импорт: цель {limit}, источник {KP_IMPORT_SOURCE}")
+    # Индекс пополняется по ходу импорта: del сохраняет приоритет, а
+    # unofficial получает только те фильмы, которых ещё нет в базе.
+    existing_index = build_existing_index(existing)
+    imported = []
+    if KP_IMPORT_SOURCE in ("auto", "dev"):
+        part = import_from_dev(limit, existing_index)
+        print(f"КП-импорт dev: получено {len(part)}")
+        imported.extend(part)
+    if len(imported) < limit and KP_IMPORT_SOURCE in ("auto", "unofficial"):
+        part = import_from_unofficial(limit - len(imported), existing_index)
+        print(f"КП-импорт Unofficial: получено {len(part)}")
+        imported.extend(part)
+
+    unique = {movie["id"]: movie for movie in imported}
+    print(f"КП-импорт: новых {len(unique)}")
+    return list(unique.values())
+
+
 def build_catalog():
+    DEV_POOL.log_start()
+    KPU_POOL.log_start()
     candidates, genres, lists = collect_candidates()
 
     # Если тренды/анонсы не скачались (сбой или лимит TMDB) — оставляем
@@ -554,7 +1066,18 @@ def build_catalog():
     # только на фильмы, у которых их ещё нет.
     old_movies = {m["id"]: m for m in (load_old("movies") or [])}
     old_cast = load_old("cast") or {}
-    KP_FIELDS = ("kp_rating", "facts", "frame", "poster", "poster_fallback")
+
+    # Новые карточки из Кинопоиска. Импорт включается вручную:
+    # KP_IMPORT_LIMIT=0 в обычном ежедневном прогоне.
+    imported = import_kp_movies(list(old_movies.values()) + movies_raw, KP_IMPORT_LIMIT)
+    if imported:
+        movies_raw.extend(imported)
+
+    kp_state = load_kp_state()
+    KP_FIELDS = (
+        "kp_rating", "facts", "frame", "poster", "poster_fallback",
+        "kp_id", "source",
+    )
 
     for m in movies_raw:
         o = old_movies.get(m["id"])
@@ -577,14 +1100,31 @@ def build_catalog():
             archived += 1
     print(f"архив: {archived} фильмов перенесены из вчерашней базы")
 
-    # Кинопоиск — обогащение двух источников по убыванию популярности,
-    # только для фильмов без рейтинга/фактов:
-    # сначала kinopoisk.dev, затем Kinopoisk Unofficial (факты + резерв).
+    # Кинопоиск — обогащение по убыванию популярности, только для фильмов
+    # без рейтинга/фактов. Cooldown не даёт каждый день тратить квоту на
+    # одни и те же ненайденные фильмы.
     movies_raw.sort(key=lambda m: m.get("popularity") or 0, reverse=True)
-    kp_ids = {}  # tmdb_id -> id Кинопоиска (для кадров)
-    for m in [m for m in movies_raw if not m.get("kp_rating")][:KP_MAX_MOVIES]:
+    kp_ids = {}  # наш id -> id Кинопоиска (для фактов и кадров)
+    for m in movies_raw:
+        if m.get("kp_id"):
+            kp_ids[m["id"]] = m["kp_id"]
+
+    def kp_ready(m, *statuses):
+        return not any(kp_should_skip(kp_state, m, s) for s in statuses)
+
+    dev_budget = KP_MAX_MOVIES
+    for m in movies_raw:
+        if dev_budget <= 0:
+            break
+        if m.get("kp_rating"):
+            continue
+        if not kp_ready(m, "not_found", "error"):
+            continue
+        dev_budget -= 1
         kp = get_kp_data(m.get("title"), m.get("year"), m.get("original_title"))
-        if kp:
+        if kp and kp.get("error"):
+            kp_mark(kp_state, m, "error")
+        elif kp:
             if kp.get("kp_id"):
                 kp_ids[m["id"]] = kp["kp_id"]
             if kp.get("description"):
@@ -593,21 +1133,48 @@ def build_catalog():
                 m["kp_rating"] = round(kp["kp_rating"], 1)
             if kp.get("poster"):
                 m["poster_fallback"] = kp["poster"]
+            kp_clear(kp_state, m, "not_found")
+            kp_clear(kp_state, m, "error")
+        else:
+            kp_mark(kp_state, m, "not_found")
         time.sleep(0.3)
 
-    for m in [m for m in movies_raw if not m.get("facts")][:UNOFFICIAL_MAX_MOVIES]:
-        kp = get_kp_unofficial(m.get("title"), m.get("year"), m.get("original_title"))
-        if kp:
+    # Факты и резервные данные: если id Кинопоиска уже известен,
+    # не тратим запрос на поиск.
+    fact_budget = UNOFFICIAL_MAX_MOVIES
+    for m in movies_raw:
+        if fact_budget <= 0:
+            break
+        if m.get("facts"):
+            continue
+        if not kp_ready(m, "no_facts", "error"):
+            continue
+        fact_budget -= 1
+        kp_id = kp_ids.get(m["id"])
+        if kp_id:
+            facts = get_kp_facts(kp_id)
+            kp = {"facts": facts} if facts else None
+        else:
+            kp = get_kp_unofficial(m.get("title"), m.get("year"), m.get("original_title"))
+        if kp and kp.get("error"):
+            kp_mark(kp_state, m, "error")
+        elif kp:
             if kp.get("film_id"):
                 kp_ids[m["id"]] = kp["film_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
             if kp.get("kp_rating"):
                 m["kp_rating"] = round(kp["kp_rating"], 1)
-            if kp.get("poster"):
+            if kp.get("poster") and not (m.get("poster") or "").startswith("http"):
                 m["poster_fallback"] = kp["poster"]
             if kp.get("facts"):
                 m["facts"] = kp["facts"]
+                kp_clear(kp_state, m, "no_facts")
+                kp_clear(kp_state, m, "error")
+            else:
+                kp_mark(kp_state, m, "no_facts")
+        else:
+            kp_mark(kp_state, m, "no_facts")
         time.sleep(0.3)
 
     # ── Чистка описаний ──
@@ -623,6 +1190,9 @@ def build_catalog():
             if SUSPECT_DESC_RE.search(desc):
                 print(f"  проверить описание: {m['id']} {m.get('title')} ({m.get('year')})")
             continue
+        # У фильмов Кинопоиска нет карточки в TMDB — английский резерв не ищем
+        if m.get("source") == "kp":
+            continue
         # Сначала смотрим вчерашний резерв — чтобы не дёргать TMDB каждый день
         old = old_movies.get(m["id"]) or {}
         en = old.get("description_en") or get_en_overview(m["id"]) or ""
@@ -636,17 +1206,35 @@ def build_catalog():
     print(f"описания: чужих заменено {replaced}")
 
     # Кадры из фильмов (Яндекс.CDN — работают из РФ без VPN) —
-    # только для фильмов, у которых кадра ещё нет и есть id Кинопоиска
+    # только для фильмов, у которых кадра ещё нет и есть id Кинопоиска.
+    frame_budget = KP_FRAME_MAX
     for m in movies_raw:
-        if m.get("frame") or not kp_ids.get(m["id"]):
+        if frame_budget <= 0:
+            break
+        if m.get("frame"):
             continue
-        frame = get_kp_frame(kp_ids[m["id"]])
+        kp_id = kp_ids.get(m["id"])
+        if not kp_id:
+            continue
+        if not kp_ready(m, "no_frame"):
+            continue
+        frame_budget -= 1
+        frame = get_kp_frame(kp_id)
         if frame:
             m["frame"] = frame
+            kp_clear(kp_state, m, "no_frame")
+        else:
+            kp_mark(kp_state, m, "no_frame")
         time.sleep(0.2)
 
-    # Постеры (параллельно) — докачиваем только отсутствующие файлы
+    # Постеры (параллельно) — докачиваем только отсутствующие файлы.
+    # Удалённые постеры Кинопоиска (Яндекс.CDN) не трогаем: качать не нужно.
     def job(m):
+        poster = m.get("poster") or ""
+        if poster.startswith("http://") or poster.startswith("https://"):
+            if not m.get("poster_fallback"):
+                m["poster_fallback"] = poster
+            return m
         local_path = f"{POSTERS_DIR}/{m['id']}.jpg"
         if not os.path.exists(local_path):
             m["poster"] = download_poster(m["id"], m.get("poster_path") or "")
@@ -712,6 +1300,11 @@ def build_catalog():
     save("lists", lists)
     save("cast", cast_map)
     save("people", list(people.values()))
+    prune_kp_state(kp_state, movies)
+    save_kp_state(kp_state)
+
+    DEV_POOL.log_stats()
+    KPU_POOL.log_stats()
 
     print(f"=== ИТОГО: {len(movies)} фильмов, {len(people)} актёров ===")
 
