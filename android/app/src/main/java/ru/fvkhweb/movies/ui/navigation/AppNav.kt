@@ -81,6 +81,7 @@ import ru.fvkhweb.movies.ui.screens.GenresScreen
 import ru.fvkhweb.movies.ui.screens.HomeScreen
 import ru.fvkhweb.movies.ui.screens.MovieDetailScreen
 import ru.fvkhweb.movies.ui.screens.PersonScreen
+import ru.fvkhweb.movies.ui.screens.RailScreen
 import ru.fvkhweb.movies.ui.theme.AppText
 import ru.fvkhweb.movies.ui.theme.Bg
 import ru.fvkhweb.movies.ui.theme.Blue
@@ -97,10 +98,12 @@ object Routes {
     const val MOVIE = "movie/{movieId}"
     const val PERSON = "person/{name}"
     const val COLLECTION = "collection/{collectionId}"
+    const val RAIL = "rail/{type}"
 
     fun movie(id: Long) = "movie/$id"
     fun person(name: String) = "person/${Uri.encode(name)}"
     fun collection(id: String) = "collection/${Uri.encode(id)}"
+    fun rail(type: String) = "rail/$type"
 }
 
 private data class TabSpec(val route: String, val icon: ImageVector, val label: String)
@@ -178,6 +181,7 @@ fun MoviesApp(container: AppContainer) {
                         viewModel.setGenre(genreId)
                         navController.navigateTab(Routes.CATALOG)
                     },
+                    onOpenRail = { type -> navController.navigate(Routes.rail(type)) },
                 )
             }
             composable(Routes.CATALOG) {
@@ -209,6 +213,23 @@ fun MoviesApp(container: AppContainer) {
                 CollectionDetailScreen(
                     viewModel = viewModel,
                     collectionId = entry.arguments?.getString("collectionId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onOpenMovie = { navController.navigate(Routes.movie(it)) },
+                )
+            }
+            composable(
+                route = Routes.RAIL,
+                arguments = listOf(navArgument("type") { type = NavType.StringType }),
+                enterTransition = {
+                    slideInHorizontally(animationSpec = tween(320)) { it } + fadeIn(animationSpec = tween(220))
+                },
+                popExitTransition = {
+                    slideOutHorizontally(animationSpec = tween(300)) { it } + fadeOut(animationSpec = tween(220))
+                },
+            ) { entry ->
+                RailScreen(
+                    viewModel = viewModel,
+                    type = entry.arguments?.getString("type").orEmpty(),
                     onBack = { navController.popBackStack() },
                     onOpenMovie = { navController.navigate(Routes.movie(it)) },
                 )
@@ -268,17 +289,6 @@ private fun AppTabBar(currentRoute: String?, onSelect: (String) -> Unit) {
             .background(Bg)
             .navigationBarsPadding(),
     ) {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(14.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0f to Bg.copy(alpha = 0f),
-                        1f to Bg,
-                    ),
-                ),
-        )
         Box(
             Modifier
                 .fillMaxWidth()

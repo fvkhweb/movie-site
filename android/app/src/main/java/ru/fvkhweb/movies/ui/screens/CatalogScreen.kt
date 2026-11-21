@@ -124,15 +124,21 @@ fun CatalogScreen(
             }
     }
 
-    Column(
-        Modifier
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(gridColumns()),
+        state = gridState,
+        modifier = Modifier
             .fillMaxSize()
             .background(Bg)
             .statusBarsPadding(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 26.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Column(Modifier.padding(horizontal = 16.dp).staggerReveal(index = 0, duration = 220)) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column(Modifier.staggerReveal(index = 0, duration = 220)) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 14.dp),
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
@@ -214,16 +220,9 @@ fun CatalogScreen(
                     }
                 }
             }
+            }
         }
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(gridColumns()),
-            state = gridState,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 26.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
             if (filtered.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     EmptyState(
@@ -256,7 +255,6 @@ fun CatalogScreen(
                     }
                 }
             }
-        }
     }
 
     if (showSort) {

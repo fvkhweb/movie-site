@@ -92,6 +92,7 @@ fun HomeScreen(
     onOpenMovie: (Long) -> Unit,
     onOpenCatalog: () -> Unit,
     onOpenGenre: (Int) -> Unit,
+    onOpenRail: (String) -> Unit,
 ) {
     val state by viewModel.catalog.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
@@ -166,6 +167,7 @@ fun HomeScreen(
             SectionHead(
                 title = "ПОПУЛЯРНОЕ СЕЙЧАС",
                 meta = "${movies.size} ${filmsWord(movies.size)}",
+                metaStyle = AppText.bodyBold,
             )
         }
 
@@ -188,7 +190,11 @@ fun HomeScreen(
 
         if (nowPlaying.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionHead("НА СЛУХУ СЕЙЧАС", "TRENDING NOW")
+                SectionHead(
+                    title = "НА СЛУХУ СЕЙЧАС",
+                    meta = "TRENDING NOW · ВСЕ →",
+                    onClick = { onOpenRail("trending") },
+                )
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -205,7 +211,11 @@ fun HomeScreen(
 
         if (upcoming.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionHead("СКОРО В КИНО", "COMING SOON")
+                SectionHead(
+                    title = "СКОРО В КИНО",
+                    meta = "COMING SOON · ВСЕ →",
+                    onClick = { onOpenRail("upcoming") },
+                )
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -234,17 +244,6 @@ fun HomeScreen(
             }
         }
 
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Column(Modifier.fillMaxWidth().padding(top = 30.dp)) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
-                Text(
-                    "Данные — TMDB и Кинопоиск API · Постеры хранятся в репозитории",
-                    style = AppText.meta,
-                    color = Muted,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
-            }
-        }
     }
 }
 

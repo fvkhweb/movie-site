@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,12 +113,17 @@ fun gridColumns(): Int {
 }
 
 @Composable
-fun SectionHead(    title: String,
+fun SectionHead(
+    title: String,
     meta: String = "",
     modifier: Modifier = Modifier,
-) {    Row(
+    metaStyle: TextStyle = AppText.meta,
+    onClick: (() -> Unit)? = null,
+) {
+    Row(
         modifier = modifier
             .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .staggerReveal(index = 0, duration = 220, offsetY = 10)
             .padding(top = 26.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -125,7 +131,7 @@ fun SectionHead(    title: String,
     ) {
         Text(title, style = AppText.section, color = White)
         if (meta.isNotBlank()) {
-            Text(meta, style = AppText.meta, color = Muted)
+            Text(meta, style = metaStyle, color = Muted)
         }
     }
 }
