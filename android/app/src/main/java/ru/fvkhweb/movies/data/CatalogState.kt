@@ -20,15 +20,18 @@ data class CatalogState(
     val collections: List<MovieCollection> = emptyList(),
     val updatedAt: Long = 0L,
 ) {
-    val moviesById: Map<Long, Movie> = movies.associateBy { it.id }
-    val genresById: Map<Int, Genre> = genres.associateBy { it.id }
+    // Индексы строятся один раз на объект, а не на каждый copy()
+    val moviesById: Map<Long, Movie> by lazy { movies.associateBy { it.id } }
+    val genresById: Map<Int, Genre> by lazy { genres.associateBy { it.id } }
+    private val peopleByName: Map<String, Person> by lazy {
+        people.associateBy { it.name.lowercase() }
+    }
 
     fun genreName(id: Int): String = genresById[id]?.name?.replaceFirstChar { it.uppercase() } ?: ""
 
     fun castOf(movieId: Long): List<CastMember> = cast[movieId.toString()].orEmpty()
 
-    fun personByName(name: String): Person? =
-        people.firstOrNull { it.name.equals(name, ignoreCase = true) }
+    fun personByName(name: String): Person? = peopleByName[name.lowercase()]
 
     val hasData: Boolean get() = movies.isNotEmpty()
 }

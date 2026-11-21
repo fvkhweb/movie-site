@@ -11,7 +11,7 @@ TMDB_BASE = "https://api.themoviedb.org/3"
 # например: https://api.allorigins.win/raw?url={url}
 TMDB_PROXY_TEMPLATE = os.environ.get("TMDB_PROXY_TEMPLATE", "")
 
-IMG_SIZE = "w500"
+IMG_SIZE = "w342"
 POSTERS_DIR = "posters"
 IMG_SOURCES = [
     "https://image.tmdb.org/t/p/" + IMG_SIZE + "{path}",
@@ -22,7 +22,7 @@ IMG_MIRROR = "https://wsrv.nl/?url=image.tmdb.org/t/p/" + IMG_SIZE
 # Резерв постера в сетке — мельче основного: хватает для карточки и меньше весит
 POSTER_MIRROR = "https://wsrv.nl/?url=image.tmdb.org/t/p/w342"
 # Общая заглушка для фильмов без постера: читается и сайтом, и приложением
-PLACEHOLDER_POSTER = "posters/placeholder.jpg"
+PLACEHOLDER_POSTER = "posters/placeholder.webp"
 
 KP_BASE = "https://api.kinopoisk.dev/v1.4/movie"
 # Пул ключей: в секрет можно вписать несколько через запятую
@@ -708,14 +708,36 @@ def get_kp_data(title, year, original_title="", imdb_id="", director=""):
     return None
 
 
+def save_webp(content, local_path):
+    """JPEG из TMDB -> WebP шириной 342: в сетке разницы не видно,
+    а файл в несколько раз легче исходного w500."""
+    try:
+        import io
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(content)).convert("RGB")
+        if img.width > 342:
+            height = round(img.height * 342 / img.width)
+            img = img.resize((342, height), Image.LANCZOS)
+        img.save(local_path, "WEBP", quality=82, method=6)
+        return True
+    except Exception as e:
+        print(f"  постер WebP: {e}")
+        return False
+
+
 def download_poster(movie_id, poster_path):
     if not poster_path:
         return ""
     os.makedirs(POSTERS_DIR, exist_ok=True)
-    local_path = os.path.join(POSTERS_DIR, f"{movie_id}.jpg").replace("\\", "/")
+    local_path = os.path.join(POSTERS_DIR, f"{movie_id}.webp").replace("\\", "/")
+    legacy_path = os.path.join(POSTERS_DIR, f"{movie_id}.jpg").replace("\\", "/")
 
     if os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
         return local_path
+    # Старые JPG ещё могут лежать в базе — не качаем их заново
+    if os.path.exists(legacy_path) and os.path.getsize(legacy_path) > 1000:
+        return legacy_path
 
     for template in IMG_SOURCES:
         url = template.format(path=poster_path)
@@ -723,9 +745,12 @@ def download_poster(movie_id, poster_path):
             r = session.get(url, timeout=30)
             if r.status_code == 200 and len(r.content) > 1000 and \
                     r.headers.get("Content-Type", "").startswith("image"):
-                with open(local_path, "wb") as f:
+                if save_webp(r.content, local_path):
+                    return local_path
+                # Pillow нет — сохраняем как раньше, чтобы не потерять постер
+                with open(legacy_path, "wb") as f:
                     f.write(r.content)
-                return local_path
+                return legacy_path
             print(f"  постер: {url} -> {r.status_code}")
         except Exception as e:
             print(f"  постер: {url} -> ошибка: {e}")
@@ -1446,13 +1471,16 @@ def build_catalog():
             if not m.get("poster_fallback"):
                 m["poster_fallback"] = poster
             return m
-        local_path = f"{POSTERS_DIR}/{m['id']}.jpg"
-        if not os.path.exists(local_path):
+        local_path = f"{POSTERS_DIR}/{m['id']}.webp"
+        legacy_path = f"{POSTERS_DIR}/{m['id']}.jpg"
+        if os.path.exists(local_path):
+            m["poster"] = local_path
+        elif os.path.exists(legacy_path):
+            m["poster"] = legacy_path
+        else:
             downloaded = download_poster(m["id"], m.get("poster_path") or "")
             if downloaded:
                 m["poster"] = downloaded
-        else:
-            m["poster"] = local_path
         if not m.get("poster_fallback"):
             path = m.get("poster_path") or ""
             m["poster_fallback"] = POSTER_MIRROR + path if path else ""
@@ -1517,11 +1545,14 @@ def build_catalog():
 
     save("movies", movies)
     save("genres", genres)
-    save("lists", lists)
+    # Сайт и приложение читают только эти две ленты; popular/top_rated/by_genre
+    # никто не использует — не возим их в data/lists.json.
+    save("lists", {key: lists.get(key, []) for key in ("now_playing", "upcoming")})
     save("cast", cast_map)
     save("people", list(people.values()))
     prune_kp_state(kp_state, movies)
     save_kp_state(kp_state)
+    prune_posters(movies)
 
     DEV_POOL.log_stats()
     KPU_POOL.log_stats()
@@ -1531,8 +1562,39 @@ def build_catalog():
 
 def save(name, data):
     os.makedirs("data", exist_ok=True)
-    with open(f"data/{name}.json", "w", encoding="utf-8") as f:
+    path = f"data/{name}.json"
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def prune_posters(movies):
+    """Удаляет постеры, на которые больше не ссылается каталог."""
+    if not os.path.isdir(POSTERS_DIR):
+        return
+    referenced = set()
+    for movie in movies:
+        path = movie.get("poster") or ""
+        if path and not path.startswith(("http://", "https://")):
+            referenced.add(os.path.basename(path))
+    removed = 0
+    freed = 0
+    for name in os.listdir(POSTERS_DIR):
+        if not name.lower().endswith((".jpg", ".jpeg", ".webp", ".png")):
+            continue
+        # Общая заглушка нужна пайплайну даже когда на неё пока никто не ссылается
+        if name in referenced or name.startswith("placeholder"):
+            continue
+        path = os.path.join(POSTERS_DIR, name)
+        try:
+            size = os.path.getsize(path)
+            os.remove(path)
+            removed += 1
+            freed += size
+        except OSError as e:
+            print(f"  постер не удалён: {name}: {e}")
+    print(f"постеры: удалено {removed} осиротевших ({freed // 1024} КБ)")
 
 
 if __name__ == "__main__":

@@ -47,13 +47,17 @@ class CatalogRepository(
             _state.update { it.copy(refreshing = true) }
 
             try {
-                val moviesText = fetchAndStore("data/movies.json", "movies.json")
-                val genresText = fetchAndStore("data/genres.json", "genres.json")
-                val listsText = fetchAndStore("data/lists.json", "lists.json")
-
-                val movies = api.decode<List<Movie>>(moviesText)
-                val genres = api.decode<List<Genre>>(genresText)
-                val lists = api.decode<MovieLists>(listsText)
+                // decode выполняется до записи: битый ответ с кодом 200
+                // не затрёт хороший локальный снимок
+                val movies = fetchDecoded("data/movies.json", "movies.json") {
+                    api.decode<List<Movie>>(it)
+                }
+                val genres = fetchDecoded("data/genres.json", "genres.json") {
+                    api.decode<List<Genre>>(it)
+                }
+                val lists = fetchDecoded("data/lists.json", "lists.json") {
+                    api.decode<MovieLists>(it)
+                }
 
                 if (movies.isEmpty()) error("Каталог пуст")
 
@@ -89,35 +93,102 @@ class CatalogRepository(
     private suspend fun loadExtras() {
         // Актёры и подборки тяжёлые и не нужны для первого экрана — грузим следом
         runCatching {
-            val text = fetchAndStore("data/cast.json", "cast.json")
-            val cast = api.decode<Map<String, List<CastMember>>>(text)
+            val cast = fetchDecoded("data/cast.json", "cast.json") {
+                api.decode<Map<String, List<CastMember>>>(it)
+            }
             _state.update { it.copy(cast = cast) }
         }
         runCatching {
-            val text = fetchAndStore("data/people.json", "people.json")
-            val people = api.decode<List<Person>>(text)
+            val people = fetchDecoded("data/people.json", "people.json") {
+                api.decode<List<Person>>(it)
+            }
             _state.update { it.copy(people = people) }
         }
         runCatching {
-            val text = fetchAndStore("data/collections.json", "collections.json")
-            val file = api.decode<CollectionsFile>(text)
+            val file = fetchDecoded("data/collections.json", "collections.json") {
+                api.decode<CollectionsFile>(it)
+            }
             _state.update { it.copy(collections = file.collections) }
         }
     }
 
-    private suspend fun fetchAndStore(path: String, fileName: String): String {
-        val text = api.fetchText(path)
-        withContext(Dispatchers.IO) {
-            val tmp = File(dir, "$fileName.tmp")
-            tmp.writeText(text)
-            if (!tmp.renameTo(File(dir, fileName))) {
-                tmp.copyTo(File(dir, fileName), overwrite = true)
-                tmp.delete()
+    /**
+     * Условный запрос: при 304 декодируем локальный снимок, при 200 —
+     * сначала декодируем и только потом атомарно пишем файл.
+     */
+    private suspend fun <T> fetchDecoded(
+        path: String,
+        fileName: String,
+        conditional: Boolean = true,
+        decode: (String) -> T,
+    ): T {
+        val meta = if (conditional) readMeta(fileName) else null
+        val response = api.fetch(path, meta?.first, meta?.second)
+
+        if (response.notModified) {
+            val cached = withContext(Dispatchers.IO) {
+                File(dir, fileName).takeIf { it.exists() }?.readText()
             }
+            if (cached != null) {
+                try {
+                    return decode(cached)
+                } catch (_: Exception) {
+                    // Битый снимок: сбрасываем валидаторы и качаем заново
+                }
+            }
+            if (!conditional) error("Сервер вернул 304 без локального снимка")
+            deleteMeta(fileName)
+            withContext(Dispatchers.IO) { File(dir, fileName).delete() }
+            return fetchDecoded(path, fileName, conditional = false, decode = decode)
         }
-        return text
+
+        val text = response.text ?: error("Пустой ответ сервера")
+        val value = decode(text)
+        writeAtomic(fileName, text)
+        writeMeta(fileName, response.etag, response.lastModified)
+        return value
     }
 
+    private suspend fun writeAtomic(fileName: String, text: String) = withContext(Dispatchers.IO) {
+        val tmp = File(dir, "$fileName.tmp")
+        tmp.writeText(text)
+        val dst = File(dir, fileName)
+        try {
+            java.nio.file.Files.move(
+                tmp.toPath(),
+                dst.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: Exception) {
+            tmp.copyTo(dst, overwrite = true)
+            tmp.delete()
+        }
+    }
+
+    private suspend fun readMeta(fileName: String): Pair<String?, String?>? =
+        withContext(Dispatchers.IO) {
+            val file = File(dir, "$fileName.meta")
+            if (!file.exists()) return@withContext null
+            val lines = runCatching { file.readLines() }.getOrDefault(emptyList())
+            val etag = lines.getOrNull(0)?.takeIf { it.isNotBlank() }
+            val lastModified = lines.getOrNull(1)?.takeIf { it.isNotBlank() }
+            if (etag == null && lastModified == null) null else etag to lastModified
+        }
+
+    private suspend fun writeMeta(fileName: String, etag: String?, lastModified: String?) =
+        withContext(Dispatchers.IO) {
+            val file = File(dir, "$fileName.meta")
+            if (etag.isNullOrBlank() && lastModified.isNullOrBlank()) {
+                file.delete()
+            } else {
+                file.writeText("${etag.orEmpty()}\n${lastModified.orEmpty()}")
+            }
+        }
+
+    private suspend fun deleteMeta(fileName: String) = withContext(Dispatchers.IO) {
+        File(dir, "$fileName.meta").delete()
+    }
     private suspend fun readSnapshot(): CatalogState? = withContext(Dispatchers.IO) {
         val moviesFile = File(dir, "movies.json")
         if (!moviesFile.exists()) return@withContext null

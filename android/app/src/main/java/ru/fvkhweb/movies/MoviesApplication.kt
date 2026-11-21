@@ -2,6 +2,11 @@ package ru.fvkhweb.movies
 
 import android.app.Application
 import android.content.Context
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -11,6 +16,7 @@ import java.util.concurrent.TimeUnit
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import ru.fvkhweb.movies.data.CatalogApi
+import ru.fvkhweb.movies.data.CatalogRefreshWorker
 import ru.fvkhweb.movies.data.CatalogRepository
 import ru.fvkhweb.movies.data.FavoritesStore
 import ru.fvkhweb.movies.data.Media
@@ -47,11 +53,26 @@ class MoviesApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        scheduleCatalogRefresh()
+    }
+
+    private fun scheduleCatalogRefresh() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val request = PeriodicWorkRequestBuilder<CatalogRefreshWorker>(12, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "catalog-refresh",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request,
+        )
     }
 
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .crossfade(180)
-        .respectCacheHeaders(false)
+        .respectCacheHeaders(true)
         .memoryCache {
             MemoryCache.Builder(this)
                 .maxSizePercent(0.25)
@@ -60,7 +81,7 @@ class MoviesApplication : Application(), ImageLoaderFactory {
         .diskCache {
             DiskCache.Builder()
                 .directory(cacheDir.resolve("images"))
-                .maxSizeBytes(400L * 1024 * 1024)
+                .maxSizeBytes(200L * 1024 * 1024)
                 .build()
         }
         .build()

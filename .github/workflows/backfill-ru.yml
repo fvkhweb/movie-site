@@ -11,10 +11,14 @@ on:
       limit:
         description: "Сколько описаний попробовать обновить"
         required: false
-        default: "150"
+        default: "300"
 
 permissions:
   contents: write
+
+concurrency:
+  group: data-update
+  cancel-in-progress: false
 
 jobs:
   backfill:
@@ -24,19 +28,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install requests
+      - run: pip install -r scripts/requirements.txt
       - name: Backfill descriptions
         run: python scripts/backfill_ru.py
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           POISKKINO_API_KEY: ${{ secrets.POISKKINO_API_KEY }}
           KP_UNOFFICIAL_API_KEY: ${{ secrets.KP_UNOFFICIAL_API_KEY }}
-          RU_BACKFILL_LIMIT: ${{ inputs.limit || '150' }}
+          RU_BACKFILL_LIMIT: ${{ inputs.limit || '300' }}
+      - name: Validate data
+        run: python scripts/validate.py
+      - name: Generate film pages
+        run: python scripts/generate_pages.py
       - name: Commit descriptions
         run: |
           git config user.name "bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data/
+          git add data/ film/ sitemap.xml
           git commit -m "backfill russian descriptions" || exit 0
-          git pull --rebase origin main
-          git push
+          for attempt in 1 2 3; do
+            if git pull --rebase origin "${GITHUB_REF_NAME:-main}" && git push; then
+              exit 0
+            fi
+            echo "push не прошёл (попытка $attempt), повтор через 5 с"
+            sleep 5
+          done
+          exit 1

@@ -21,6 +21,18 @@ val releaseKeyFile = keystoreProps.getProperty("storeFile")
     ?.let { rootProject.file(it) }
     ?.takeIf { it.exists() }
 
+// Без ключа release-сборка не должна молча подписываться debug-ключом:
+// такое приложение не установится поверх и сломает обновления.
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true) || it.contains("bundle", ignoreCase = true)
+}
+if (releaseKeyFile == null && releaseRequested) {
+    throw GradleException(
+        "keystore.properties не найден или storeFile не существует. " +
+            "Release-сборка без ключа подписи запрещена."
+    )
+}
+
 android {
     namespace = "ru.fvkhweb.movies"
     compileSdk = 35
@@ -53,11 +65,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            // Без keystore.properties сборка не падает: подписываем debug-ключом.
+            // null допустим только при запуске не-release задач; проверка выше
+            // не даст собрать release без keystore.properties
             signingConfig = if (releaseKeyFile != null) {
                 signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                null
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -102,6 +115,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.work.runtime.ktx)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

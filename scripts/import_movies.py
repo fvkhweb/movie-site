@@ -522,13 +522,19 @@ def run():
     for movie in valid:
         movie["added_at"] = added_at
     movies.extend(valid)
-    save_movies_atomic(movies)
-    print(f"Добавлено в movies.json: {len(valid)}, всего теперь {len(movies)}")
+    cast_ok = True
     try:
         update_cast_people(valid)
         print("Актёры обновлены")
     except Exception as e:
+        cast_ok = False
         print(f"  актёры: {e}")
+    # cast живёт только в cast.json; в movies.json он не нужен
+    if cast_ok:
+        for movie in movies:
+            movie.pop("cast", None)
+    save_movies_atomic(movies)
+    print(f"Добавлено в movies.json: {len(valid)}, всего теперь {len(movies)}")
     try:
         write_import_log(valid, started, IMPORT_DECADES)
         print(f"Лог импорта: {IMPORT_LOG_DIR}/{started.strftime('%Y-%m-%d')}.md")

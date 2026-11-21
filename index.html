@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://mc.yandex.ru; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://mc.yandex.ru https://yandex.ru; frame-src https://www.youtube.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="description" content="Каталог фильмов: жанры, годы, рейтинг, актёры, подборки. С постерами и кадрами на русском.">
   <title>Что посмотреть?</title>
   <meta name="theme-color" content="#090b0f">
@@ -21,7 +23,7 @@
   <link rel="preconnect" href="https://cdn.statically.io">
   <link rel="dns-prefetch" href="https://image.tmdb.org">
   <link rel="stylesheet" href="fonts/fonts.css?v=6">
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
   <header>
@@ -144,17 +146,10 @@
     <div class="wrap foot">
       <strong>ЧТО ПОСМОТРЕТЬ<span style="color:var(--blue)">?</span></strong>
       <span>Данные — <a href="https://www.themoviedb.org/" target="_blank" rel="noopener">TMDB</a> и <a href="https://kinopoisk.dev" target="_blank" rel="noopener">Кинопоиск API</a></span>
-      <span>Постеры хранятся в репозитории</span>
+      <span>Постеры хранятся в репозитории. Права — у правообладателей.</span>
+      <span>Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</span>
     </div>
   </footer>
-
-  <div id="movieModal" class="modal" hidden>
-    <div class="modal-backdrop"></div>
-    <div class="modal-card">
-      <button class="modal-close" id="modalClose" title="Закрыть">✕</button>
-      <div id="modalBody"></div>
-    </div>
-  </div>
 
   <section id="moviePage" hidden></section>
 
@@ -170,25 +165,64 @@
     <a href="#saved" data-tab="saved"><span>♡</span>Избранное</a>
   </nav>
 
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=30"></script>
   <script>
     if ("serviceWorker" in navigator) {
       addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
     }
   </script>
 
-  <!-- Yandex.Metrika counter -->
-  <script type="text/javascript">
-      (function(m,e,t,r,i,k,a){
-          m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-          m[i].l=1*new Date();
-          for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-          k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
-      })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=114238596', 'ym');
+  <div id="consent" class="consent" hidden>
+    <p>Мы используем Яндекс.Метрику, чтобы понимать, какие разделы полезны. Запись сессий отключена.</p>
+    <div class="consent-actions">
+      <button id="consentYes" class="primary" type="button">Разрешить аналитику</button>
+      <button id="consentNo" class="secondary" type="button">Только необходимое</button>
+    </div>
+  </div>
 
-      ym(114238596, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+  <!-- Yandex.Metrika counter: скрипт грузится только после согласия -->
+  <script>
+    (function () {
+      var key = "metrika-consent";
+      var box = document.getElementById("consent");
+      function loadMetrika() {
+        (function (m, e, t, r, i, k, a) {
+          m[i] = m[i] || function () { (m[i].a = m[i].a || []).push(arguments); };
+          m[i].l = 1 * new Date();
+          for (var j = 0; j < document.scripts.length; j++) { if (document.scripts[j].src === r) { return; } }
+          k = e.createElement(t); a = e.getElementsByTagName(t)[0];
+          k.async = 1; k.src = r; a.parentNode.insertBefore(k, a);
+        })(window, document, "script", "https://mc.yandex.ru/metrika/tag.js?id=114238596", "ym");
+
+        window.ym(114238596, "init", {
+          ssr: true,
+          webvisor: false,
+          clickmap: true,
+          ecommerce: "dataLayer",
+          referrer: document.referrer,
+          url: location.href,
+          accurateTrackBounce: true,
+          trackLinks: true
+        });
+      }
+      var choice = null;
+      try { choice = localStorage.getItem(key); } catch (e) {}
+      if (choice === "yes") {
+        loadMetrika();
+      } else if (choice !== "no") {
+        box.hidden = false;
+      }
+      document.getElementById("consentYes").addEventListener("click", function () {
+        try { localStorage.setItem(key, "yes"); } catch (e) {}
+        box.hidden = true;
+        loadMetrika();
+      });
+      document.getElementById("consentNo").addEventListener("click", function () {
+        try { localStorage.setItem(key, "no"); } catch (e) {}
+        box.hidden = true;
+      });
+    })();
   </script>
-  <noscript><div><img src="https://mc.yandex.ru/watch/114238596" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
   <!-- /Yandex.Metrika counter -->
 </body>
 </html>

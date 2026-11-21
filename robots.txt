@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /movie-site/data/
+Disallow: /movie-site/posters/
+Disallow: /movie-site/app/
+Disallow: /movie-site/icons/
+
+Sitemap: https://fvkhweb.github.io/movie-site/sitemap.xml
