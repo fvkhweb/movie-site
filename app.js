@@ -5,9 +5,33 @@
 const PAGE_SIZE = window.matchMedia("(max-width: 650px)").matches ? 30 : 60;
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
-const DATA_VERSION = "11"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
-const PIXEL =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+const DATA_VERSION = "12"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+
+// Битое или старое значение в localStorage не должно ронять весь сайт
+function saveFavorites(ids) {
+  try {
+    localStorage.setItem("favorites", JSON.stringify(ids));
+  } catch {}
+}
+
+function readFavorites() {
+  try {
+    const raw = localStorage.getItem("favorites");
+    if (!raw) return [];
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    const ids = [];
+    for (const item of value) {
+      const rawId = item && typeof item === "object" ? item.id : item;
+      const id = Number(rawId);
+      if (rawId != null && rawId !== "" && Number.isFinite(id) && !ids.includes(id)) ids.push(id);
+    }
+    if (JSON.stringify(ids) !== raw) saveFavorites(ids);
+    return ids;
+  } catch {
+    return [];
+  }
+}
 
 const state = {
   movies: [],
@@ -21,7 +45,7 @@ const state = {
   countryInclude: new Set(), // показывать только эти страны
   countryExclude: new Set(), // исключить эти страны
   countryQuery: "", // поиск по списку стран
-  favorites: JSON.parse(localStorage.getItem("favorites") || "[]"),
+  favorites: readFavorites(),
   limit: PAGE_SIZE,
   actor: "",    // фильтр «фильмы актёра»
   currentModal: null, // какой фильм открыт в модалке
@@ -106,6 +130,9 @@ function movieDescription(m) {
 
 function posterSources(movie) {
   // Локальный файл всегда первый, резерв — Кинопоиск (Яндекс.CDN) или wsrv-прокси
+  if (!movie.poster && !movie.poster_fallback) {
+    return { local: "icons/no-poster.svg", fallback: "" };
+  }
   const local = movie.poster || `posters/${movie.id}.jpg`;
   const fallback = movie.poster_fallback || "";
   return { local, fallback };
@@ -1010,7 +1037,7 @@ function toggleFavorite(id) {
   const i = state.favorites.indexOf(id);
   if (i === -1) state.favorites.push(id);
   else state.favorites.splice(i, 1);
-  localStorage.setItem("favorites", JSON.stringify(state.favorites));
+  saveFavorites(state.favorites);
   updateFavBadge();
   // Обновим сердечки везде
   document.querySelectorAll(`.heart[data-id="${id}"]`).forEach((b) => {
@@ -1495,8 +1522,13 @@ function bindImageFallbacks(root) {
         else delete img.dataset.fallback;
         img.src = chain[0];
       } else {
-        img.src = PIXEL;
-        img.style.opacity = "0";
+        // Ни локального файла, ни резерва — общая заглушка вместо пустоты.
+        // Флаг не даёт зациклить error, если и заглушка не загрузилась.
+        if (!img.dataset.noPoster) {
+          img.dataset.noPoster = "1";
+          img.src = "icons/no-poster.svg";
+          img.style.opacity = "1";
+        }
       }
     },
     true

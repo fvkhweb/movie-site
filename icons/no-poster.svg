@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="750" viewBox="0 0 500 750">
+  <rect width="500" height="750" fill="#17181c"/>
+  <rect x="90" y="270" width="320" height="210" rx="18" fill="none" stroke="#3a3d46" stroke-width="8"/>
+  <path d="M90 315h320M90 435h320" stroke="#3a3d46" stroke-width="8"/>
+  <path d="M130 310v10M190 310v10M250 310v10M310 310v10M370 310v10M130 420v10M190 420v10M250 420v10M310 420v10M370 420v10" stroke="#3a3d46" stroke-width="8" stroke-linecap="round"/>
+  <path d="M210 340l90 40-90 40z" fill="#555963"/>
+  <text x="250" y="540" fill="#8a8f9a" font-family="Arial, sans-serif" font-size="28" text-anchor="middle">Нет постера</text>
+</svg>

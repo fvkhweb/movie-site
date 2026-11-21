@@ -19,6 +19,10 @@ IMG_SOURCES = [
     "https://wsrv.nl/?url=image.tmdb.org/t/p/" + IMG_SIZE + "{path}",
 ]
 IMG_MIRROR = "https://wsrv.nl/?url=image.tmdb.org/t/p/" + IMG_SIZE
+# Резерв постера в сетке — мельче основного: хватает для карточки и меньше весит
+POSTER_MIRROR = "https://wsrv.nl/?url=image.tmdb.org/t/p/w342"
+# Общая заглушка для фильмов без постера: читается и сайтом, и приложением
+PLACEHOLDER_POSTER = "posters/placeholder.jpg"
 
 KP_BASE = "https://api.kinopoisk.dev/v1.4/movie"
 # Пул ключей: в секрет можно вписать несколько через запятую
@@ -219,18 +223,63 @@ def titles_match(a, b):
     return len(a) >= 4 and len(b) >= 4 and (a in b or b in a)
 
 
-def kp_candidate_ok(query_names, query_year, cand_names, cand_year):
-    """Найденный на Кинопоиске фильм — тот же самый?
-    Название должно совпасть хотя бы по одному варианту (русский/оригинал),
-    год — с точностью до года (перезапуски и тёзки отсеиваются)."""
+def names_match(a, b):
+    """Одно имя похоже на другое: целиком, по вхождению или по фамилии."""
+    a, b = norm_title(a), norm_title(b)
+    if not a or not b:
+        return None
+    if a == b or a in b or b in a:
+        return True
+    return a.split()[-1] == b.split()[-1]
+
+
+def directors_match(a, b):
+    """None — сравнить нельзя (одного режиссёра нет), иначе True/False."""
+    if not a or not b:
+        return None
+    for x in re.split(r"[,;/]", a):
+        for y in re.split(r"[,;/]", b):
+            if names_match(x, y):
+                return True
+    return False
+
+
+def kp_match_score(query_names, query_year, cand_names, cand_year,
+                   query_original="", cand_original="",
+                   query_imdb="", cand_imdb="",
+                   query_director="", cand_director=""):
+    """Похожесть кандидата Кинопоиска на наш фильм; -1 — точно другой.
+
+    imdb_id решает всё. Оригинальные названия должны совпадать: у разных
+    фильмов бывает один русский прокатный title («Одержимость»). Режиссёр
+    отсекает одноимённые фильмы одного года.
+    """
+    if query_imdb and cand_imdb:
+        return 100 if query_imdb == cand_imdb else -1
+    q_orig, c_orig = norm_title(query_original), norm_title(cand_original)
+    if q_orig and c_orig and q_orig != c_orig:
+        return -1
     if not any(titles_match(q, c) for q in query_names if q for c in cand_names if c):
-        return False
+        return -1
+    score = 6 if q_orig and q_orig == c_orig else 0
+    score += 2
     try:
         qy = int(str(query_year)[:4])
         cy = int(str(cand_year)[:4])
     except (TypeError, ValueError):
-        return True  # года нет — доверяем названию
-    return abs(qy - cy) <= 1
+        return score + 1
+    if qy == cy:
+        score += 4
+    elif abs(qy - cy) == 1:
+        score += 1
+    else:
+        return -1
+    if query_director and cand_director:
+        if directors_match(query_director, cand_director):
+            score += 6
+        else:
+            return -1
+    return score
 
 
 def collect_candidates():
@@ -365,6 +414,7 @@ def enrich_movie(m):
         "poster_path": details.get("poster_path") or "",
         "backdrop": details.get("backdrop_path") or "",
         "description": details.get("overview") or "",
+        "imdb_id": details.get("imdb_id") or "",
         "cast": cast,
         "similar": get_recommendations(m["id"]),
         "trailer": get_trailer(m["id"]),
@@ -396,50 +446,71 @@ def get_kp_unofficial(title, year, original_title=""):
             return None
 
         # Первый результат может быть другим фильмом (тёзка, ремейк) —
-        # берём только запись, совпавшую по названию и году
+        # ранжируем по названию/году и проверяем оригинальное название
+        # по деталям, прежде чем брать карточку.
         query_names = [title, original_title]
-        f = next(
-            (x for x in films if kp_candidate_ok(
+        ranked = []
+        for x in films:
+            score = kp_match_score(
                 query_names, year,
                 [x.get("nameRu"), x.get("nameEn"), x.get("nameOriginal")],
                 x.get("year"),
-            )),
-            None,
-        )
-        if not f:
+                query_original=original_title,
+                cand_original=x.get("nameOriginal") or x.get("nameEn") or "",
+            )
+            if score >= 0:
+                ranked.append((score, x))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        if not ranked:
             print(f"  КП-Unofficial '{title}' ({year}): нет совпадения среди {len(films)} результатов")
             return None
-        film_id = f.get("filmId") or f.get("kinopoiskId")
-        poster = f.get("posterUrl") or f.get("posterUrlPreview") or ""
-        description = f.get("description")
-        rating = f.get("ratingKinopoisk") or f.get("rating")
 
-        time.sleep(0.2)
-        # Детали пробуем в двух версиях API: v2.2 отдаёт объект напрямую,
-        # v2.1 оборачивает его в {"data": {...}}
-        details_data = None
-        for ver in ("v2.2", "v2.1"):
-            d = kpu_get(f"{ver}/films/{film_id}")
-            if d is None:
-                break
-            if d.status_code == 200:
-                det = d.json()
-                details_data = det.get("data") if isinstance(det.get("data"), dict) else det
-                break
-        if details_data:
-            description = details_data.get("description") or description
-            poster = details_data.get("posterUrl") or poster
-            rating = details_data.get("ratingKinopoisk") or rating
+        for score, f in ranked[:3]:
+            film_id = f.get("filmId") or f.get("kinopoiskId")
+            poster = f.get("posterUrl") or f.get("posterUrlPreview") or ""
+            description = f.get("description")
+            rating = f.get("ratingKinopoisk") or f.get("rating")
 
-        time.sleep(0.2)
-        facts = get_kp_facts(film_id)
-        return {
-            "poster": poster,
-            "description": description,
-            "kp_rating": rating,
-            "facts": facts,
-            "film_id": film_id,
-        }
+            time.sleep(0.2)
+            # Детали пробуем в двух версиях API: v2.2 отдаёт объект напрямую,
+            # v2.1 оборачивает его в {"data": {...}}
+            details_data = None
+            for ver in ("v2.2", "v2.1"):
+                d = kpu_get(f"{ver}/films/{film_id}")
+                if d is None:
+                    break
+                if d.status_code == 200:
+                    det = d.json()
+                    details_data = det.get("data") if isinstance(det.get("data"), dict) else det
+                    break
+            if details_data:
+                description = details_data.get("description") or description
+                poster = details_data.get("posterUrl") or poster
+                rating = details_data.get("ratingKinopoisk") or rating
+                score = kp_match_score(
+                    query_names, year,
+                    [details_data.get("nameRu"), details_data.get("nameEn"), details_data.get("nameOriginal")],
+                    details_data.get("year"),
+                    query_original=original_title,
+                    cand_original=details_data.get("nameOriginal") or details_data.get("nameEn") or "",
+                )
+                if score < 0:
+                    continue
+            elif score < 8:
+                # Детали не пришли — без проверки берём только явное совпадение
+                continue
+
+            time.sleep(0.2)
+            facts = get_kp_facts(film_id)
+            return {
+                "poster": poster,
+                "description": description,
+                "kp_rating": rating,
+                "facts": facts,
+                "film_id": film_id,
+            }
+        print(f"  КП-Unofficial '{title}' ({year}): кандидаты не подтвердились")
+        return None
     except Exception as e:
         print(f"  КП-Unofficial ошибка для '{title}': {e}")
         return {"error": True}
@@ -547,7 +618,7 @@ def kp_dev_get(path, params=None):
     return DEV_POOL.request(do_request)
 
 
-def get_kp_data(title, year, original_title=""):
+def get_kp_data(title, year, original_title="", imdb_id="", director=""):
     if not KP_DEV_KEYS:
         return None
     try:
@@ -566,40 +637,71 @@ def get_kp_data(title, year, original_title=""):
             return None
 
         # Первый результат может быть другим фильмом (тёзка, ремейк, кривой
-        # матч) — берём только запись, совпавшую по названию и году
+        # матч) — ранжируем по названию/году, а режиссёра и imdb сверяем
+        # по деталям выбранного кандидата.
         query_names = [title, original_title]
-        movie = next(
-            (d for d in docs if kp_candidate_ok(
+        ranked = []
+        for d in docs:
+            score = kp_match_score(
                 query_names, year,
                 [d.get("name"), d.get("alternativeName"), d.get("enName")],
                 d.get("year"),
-            )),
-            None,
-        )
-        if not movie:
+                query_original=original_title,
+                cand_original=d.get("alternativeName") or d.get("enName") or "",
+                query_imdb=imdb_id,
+                cand_imdb=(d.get("externalId") or {}).get("imdb") or "",
+                query_director=director,
+            )
+            if score >= 0:
+                ranked.append((score, d))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        if not ranked:
             print(f"  КП '{title}' ({year}): нет совпадения среди {len(docs)} результатов")
             return None
-        kp_id = movie["id"]
-        poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
-        time.sleep(0.3)
-        d_resp = kp_dev_get(f"/{kp_id}")
-        if d_resp is None or d_resp.status_code != 200:
-            print(f"  КП детали {kp_id}: HTTP {d_resp.status_code}")
+
+        for score, movie in ranked[:3]:
+            kp_id = movie["id"]
+            poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
+            time.sleep(0.3)
+            d_resp = kp_dev_get(f"/{kp_id}")
+            if d_resp is None or d_resp.status_code != 200:
+                print(f"  КП детали {kp_id}: HTTP {d_resp.status_code}")
+                if score < 8:
+                    continue
+                return {
+                    "poster": poster,
+                    "description": movie.get("description"),
+                    "kp_rating": (movie.get("rating") or {}).get("kp"),
+                    "kp_id": kp_id,
+                }
+
+            details = d_resp.json()
+            cand_director = ", ".join(
+                p.get("name", "") for p in details.get("persons") or []
+                if p.get("profession") == "режиссер"
+            )
+            full_score = kp_match_score(
+                query_names, year,
+                [details.get("name"), details.get("alternativeName"), details.get("enName")],
+                details.get("year"),
+                query_original=original_title,
+                cand_original=details.get("alternativeName") or details.get("enName") or "",
+                query_imdb=imdb_id,
+                cand_imdb=(details.get("externalId") or {}).get("imdb") or "",
+                query_director=director,
+                cand_director=cand_director,
+            )
+            if full_score < 0:
+                continue
             return {
-                "poster": poster,
-                "description": movie.get("description"),
-                "kp_rating": (movie.get("rating") or {}).get("kp"),
+                # Постер Кинопоиска лежит на Яндекс.CDN и открывается из РФ
+                "poster": (details.get("poster") or {}).get("url") or poster,
+                "description": details.get("description") or movie.get("description"),
+                "kp_rating": (details.get("rating") or {}).get("kp"),
                 "kp_id": kp_id,
             }
-
-        details = d_resp.json()
-        return {
-            # Постер Кинопоиска лежит на Яндекс.CDN и открывается из РФ
-            "poster": (details.get("poster") or {}).get("url") or poster,
-            "description": details.get("description") or movie.get("description"),
-            "kp_rating": (details.get("rating") or {}).get("kp"),
-            "kp_id": kp_id,
-        }
+        print(f"  КП '{title}' ({year}): кандидаты не подтвердились")
+        return None
     except Exception as e:
         print(f"  КП ошибка для '{title}': {e}")
         return {"error": True}
@@ -806,6 +908,102 @@ def is_duplicate(movie, index):
     return False
 
 
+def dedup_key(movie):
+    """Ключ одинаковых карточек. imdb_id надёжнее всего; без него —
+    оригинальное название + год + режиссёр (одноимённые фильмы одного года
+    с разными режиссёрами — разные фильмы)."""
+    imdb = (movie.get("imdb_id") or "").strip()
+    if imdb:
+        return ("imdb", imdb)
+    year = norm_year(movie.get("year") or (movie.get("release_date") or "")[:4])
+    title = norm_title(movie.get("original_title"))
+    director = norm_title(movie.get("director"))
+    if title and year and director:
+        return ("td", title, year, director)
+    return None
+
+
+def dedup_movies(movies):
+    """Убирает дубли, оставляя карточку с лучшим popularity/rating,
+    и переносит в неё недостающие поля Кинопоиска."""
+    groups = {}
+    for movie in movies:
+        key = dedup_key(movie)
+        if key:
+            groups.setdefault(key, []).append(movie)
+
+    dropped = set()
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        group.sort(
+            key=lambda m: (m.get("popularity") or 0, m.get("rating") or 0, bool(m.get("poster"))),
+            reverse=True,
+        )
+        keep = group[0]
+        for dup in group[1:]:
+            for field, value in dup.items():
+                if field in ("id", "source", "kp_id", "imdb_id", "similar"):
+                    continue
+                if value and not keep.get(field):
+                    keep[field] = value
+            dropped.add(dup["id"])
+    return [m for m in movies if m["id"] not in dropped], dropped
+
+
+def prune_list_ids(lists, dropped):
+    for key, value in (lists or {}).items():
+        if key == "by_genre" and isinstance(value, dict):
+            lists[key] = {
+                genre: [mid for mid in ids if mid not in dropped]
+                for genre, ids in value.items()
+            }
+        elif isinstance(value, list):
+            lists[key] = [mid for mid in value if mid not in dropped]
+
+
+MIN_SIMILAR = 4
+MAX_SIMILAR = 6
+
+
+def repair_similar(movies):
+    """Оставляет в «Похожее» только фильмы каталога и, если их меньше
+    четырёх, добирает до шести того же жанра по рейтингу и близости года."""
+    ids = {m["id"] for m in movies}
+    by_genre = {}
+    for movie in movies:
+        for genre in movie.get("genres") or []:
+            by_genre.setdefault(genre, []).append(movie)
+
+    for movie in movies:
+        similar = []
+        for sid in movie.get("similar") or []:
+            if sid in ids and sid != movie["id"] and sid not in similar:
+                similar.append(sid)
+
+        if len(similar) < MIN_SIMILAR:
+            year = norm_year(movie.get("year")) or 0
+            pool = {}
+            for genre in movie.get("genres") or []:
+                for cand in by_genre.get(genre, []):
+                    if cand["id"] != movie["id"] and cand["id"] not in similar:
+                        pool[cand["id"]] = cand
+            candidates = sorted(
+                pool.values(),
+                key=lambda c: (
+                    -(c.get("rating") or 0),
+                    abs((norm_year(c.get("year")) or 0) - year),
+                ),
+            )
+            for cand in candidates[:MAX_SIMILAR - len(similar)]:
+                similar.append(cand["id"])
+
+        if similar:
+            movie["similar"] = similar[:MAX_SIMILAR]
+        else:
+            movie.pop("similar", None)
+
+
 def kp_doc_to_movie(doc):
     """Карточка kinopoisk.dev -> наша схема movies.json."""
     kp_id = doc.get("id")
@@ -833,6 +1031,7 @@ def kp_doc_to_movie(doc):
         "id": KP_ID_OFFSET + int(kp_id),
         "source": "kp",
         "kp_id": int(kp_id),
+        "imdb_id": (doc.get("externalId") or {}).get("imdb") or "",
         "title": title,
         "original_title": clean_text(doc.get("alternativeName")) or clean_text(doc.get("enName")) or "",
         "year": str(year) if year else "",
@@ -922,7 +1121,7 @@ def import_from_dev(limit, index):
                 "limit": 250,
                 "selectFields": "id,name,alternativeName,enName,year,description,"
                                 "shortDescription,movieLength,rating,votes,genres,"
-                                "countries,poster,premiere",
+                                "countries,poster,premiere,externalId",
                 "notNullFields": "poster.url",
                 "type": "movie",
                 **query,
@@ -1116,17 +1315,21 @@ def build_catalog():
     for m in movies_raw:
         if dev_budget <= 0:
             break
+        if m.get("kp_id"):
+            continue
         if m.get("kp_rating"):
             continue
         if not kp_ready(m, "not_found", "error"):
             continue
         dev_budget -= 1
-        kp = get_kp_data(m.get("title"), m.get("year"), m.get("original_title"))
+        kp = get_kp_data(m.get("title"), m.get("year"), m.get("original_title"),
+                         m.get("imdb_id") or "", m.get("director") or "")
         if kp and kp.get("error"):
             kp_mark(kp_state, m, "error")
         elif kp:
             if kp.get("kp_id"):
                 kp_ids[m["id"]] = kp["kp_id"]
+                m["kp_id"] = kp["kp_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
             if kp.get("kp_rating"):
@@ -1161,6 +1364,7 @@ def build_catalog():
         elif kp:
             if kp.get("film_id"):
                 kp_ids[m["id"]] = kp["film_id"]
+                m["kp_id"] = kp["film_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
             if kp.get("kp_rating"):
@@ -1227,6 +1431,13 @@ def build_catalog():
             kp_mark(kp_state, m, "no_frame")
         time.sleep(0.2)
 
+    # Дубли могли прийти из TMDB и Кинопоиска под разными id: оставляем
+    # одну карточку и переносим в неё недостающие поля.
+    movies_raw, dropped = dedup_movies(movies_raw)
+    if dropped:
+        prune_list_ids(lists, dropped)
+        print(f"дубли: убрано {len(dropped)} карточек")
+
     # Постеры (параллельно) — докачиваем только отсутствующие файлы.
     # Удалённые постеры Кинопоиска (Яндекс.CDN) не трогаем: качать не нужно.
     def job(m):
@@ -1237,17 +1448,26 @@ def build_catalog():
             return m
         local_path = f"{POSTERS_DIR}/{m['id']}.jpg"
         if not os.path.exists(local_path):
-            m["poster"] = download_poster(m["id"], m.get("poster_path") or "")
+            downloaded = download_poster(m["id"], m.get("poster_path") or "")
+            if downloaded:
+                m["poster"] = downloaded
         else:
             m["poster"] = local_path
         if not m.get("poster_fallback"):
             path = m.get("poster_path") or ""
-            m["poster_fallback"] = IMG_MIRROR + path if path else ""
+            m["poster_fallback"] = POSTER_MIRROR + path if path else ""
+        if not m.get("poster"):
+            m["poster"] = PLACEHOLDER_POSTER
         return m
 
     with ThreadPoolExecutor(max_workers=DOWNLOAD_WORKERS) as ex:
         movies = list(ex.map(job, movies_raw))
     print(f"постеры: {sum(1 for m in movies if m['poster'])}/{len(movies)}")
+
+    # «Похожее» ссылается только на фильмы каталога, иначе блок пустует
+    repair_similar(movies)
+    linked = sum(len(m.get("similar") or []) for m in movies)
+    print(f"похожее: {linked} ссылок")
 
     # cast.json и индекс актёров собираем ДО чистки записей
     cast_map = {str(m["id"]): m.get("cast", []) for m in movies}
