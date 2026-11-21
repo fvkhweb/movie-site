@@ -1276,10 +1276,10 @@ function moviePageHtml(m) {
     ? `<div class="similar-section"><h3>🎯 Похожее</h3><div class="similar-row">${similar
         .map(
           (s) => `
-      <div class="similar-card" data-id="${s.id}">
+      <a class="similar-card" href="#movie/${s.id}" data-id="${s.id}">
         <img alt="${escapeAttr(s.title || "")}" loading="lazy" src="${escapeAttr(s.poster || `posters/${s.id}.webp`)}">
         <span>${escapeHtml(s.title || "")}</span>
-      </div>`
+      </a>`
         )
         .join("")}</div></div>`
     : "";
@@ -1597,13 +1597,18 @@ function bindEvents() {
 
   bindMovieBodyActions(el("moviePage"));
 
-  // Поворот телефона/ресайз меняет размер батча каталога
-  const sizeQuery = window.matchMedia("(max-width: 650px)");
-  sizeQuery.addEventListener("change", () => {
-    PAGE_SIZE = pageSize();
+  // Поворот телефона/ресайз меняет размер батча каталога.
+  // Пересчитываем на каждое событие, но перерисовываем только если
+  // порог 650px реально пересечён.
+  const syncPageSize = debounce(() => {
+    const next = pageSize();
+    if (next === PAGE_SIZE) return;
+    PAGE_SIZE = next;
     state.limit = PAGE_SIZE;
     if (state.movies.length) render();
-  });
+  }, 150);
+  window.addEventListener("resize", syncPageSize, { passive: true });
+  window.addEventListener("orientationchange", syncPageSize, { passive: true });
 
   // Бесконечная прокрутка
   const observer = new IntersectionObserver((entries) => {
