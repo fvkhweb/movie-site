@@ -14,6 +14,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 POSTERS = os.path.join(ROOT, "posters")
 
+# Защита в глубину: trailer уходит в iframe, poster_fallback — в src картинки.
+YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+FALLBACK_HOSTS = {
+    "image.tmdb.org",
+    "kinopoiskapiunofficial.tech",
+    "wsrv.nl",
+    "images.weserv.nl",
+}
+FALLBACK_HOST_SUFFIXES = (".yandex.net",)
+
 errors = []
 warnings = []
 
@@ -129,6 +139,22 @@ def check_movie(movie, ids, current_year):
         error(f"{mid}: poster_fallback не строка")
     elif fallback and "no-poster" in fallback.lower():
         error(f"{mid}: poster_fallback ведёт на заглушку ({fallback})")
+
+    trailer = movie.get("trailer")
+    if trailer is not None and not isinstance(trailer, str):
+        error(f"{mid}: trailer не строка")
+    elif trailer and not YOUTUBE_ID.match(trailer):
+        error(f"{mid}: trailer не похож на YouTube-ID: {trailer!r}")
+
+    if fallback:
+        # Схема обязательна https: javascript:/data: в src недопустимы.
+        match = re.match(r"^https://([^/?#]+)", fallback)
+        if not match:
+            error(f"{mid}: poster_fallback должен быть https-ссылкой ({fallback})")
+        else:
+            host = match.group(1).lower().split(":")[0]
+            if host not in FALLBACK_HOSTS and not host.endswith(FALLBACK_HOST_SUFFIXES):
+                warn(f"{mid}: poster_fallback с неизвестного домена: {host}")
 
     if movie.get("cast"):
         warn(f"{mid}: cast продублирован в movies.json (должен быть только в cast.json)")

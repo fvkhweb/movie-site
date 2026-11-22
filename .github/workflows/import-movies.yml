@@ -66,7 +66,7 @@ jobs:
         run: |
           git config user.name "bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data/ posters/ docs/imports/ film/ sitemap.xml
+          git add data/ posters/ film/ sitemap.xml
           git commit -m "import movies by decades" || exit 0
           for attempt in 1 2 3; do
             if git pull --rebase origin "${GITHUB_REF_NAME:-main}" && git push; then

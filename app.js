@@ -1399,7 +1399,15 @@ function route() {
   }
   const hash = location.hash;
   if (hash && hash !== "#home") {
-    const target = document.querySelector(hash);
+    // Хеш приходит из адресной строки, а querySelector на произвольной строке
+    // бросает SyntaxError (#movie/123, #a/b), поэтому ищем строго по id.
+    let targetId = hash.slice(1);
+    try {
+      targetId = decodeURIComponent(targetId);
+    } catch {
+      // Битый %-escape — пробуем как есть.
+    }
+    const target = document.getElementById(targetId);
     if (target) {
       jumpTo(target);
       return;
