@@ -193,6 +193,9 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 .movie-actions .fav-btn{border:1px solid #384252;background:transparent;color:#dce2eb;border-radius:6px;padding:11px 16px;font-size:12px;font-weight:800}
 .movie-actions .fav-btn:hover{border-color:var(--blue)}
 .movie-actions .fav-btn.active{border-color:var(--blue);color:#7fa0ff}
+.movie-actions .movie-action{border:1px solid #384252;background:transparent;color:#dce2eb;border-radius:6px;padding:11px 16px;font-size:12px;font-weight:800}
+.movie-actions .movie-action:hover{border-color:var(--blue)}
+.movie-actions .movie-permalink{display:inline-flex;align-items:center;text-decoration:none;font-family:inherit}
 .movie-actions .trailer-btn{margin-top:0}
 .movie-body{padding:0 34px 30px}
 .overview{color:#a2adbb;font-size:13px;line-height:1.8;margin:0}
@@ -380,7 +383,7 @@ body[data-view="collections"] footer{display:none}
   .hero-text{margin-top:14px}
   .hero-text h1{font-size:22px;letter-spacing:-1px;margin:8px 0 6px}
   .movie-actions{flex-wrap:wrap;gap:8px}
-  .movie-actions .fav-btn,.movie-actions .trailer-btn{flex:1 1 auto;text-align:center}
+  .movie-actions .fav-btn,.movie-actions .trailer-btn,.movie-actions .movie-action{flex:1 1 auto;text-align:center}
   .movie-hero .trailer-wrap{height:52vw}
   .movie-hero .trailer-wrap iframe{height:52vw}
   #collectionsPage .coll-row{gap:18px 10px;grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}

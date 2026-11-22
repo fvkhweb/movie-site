@@ -10,6 +10,7 @@ function pageSize() {
 let PAGE_SIZE = pageSize();
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
+const FILM_BASE = "https://fvkhweb.github.io/movie-site";
 const DATA_VERSION = "13"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 
 // Битое или старое значение в localStorage не должно ронять весь сайт
@@ -1218,6 +1219,46 @@ function setMovieHeroBackdrop(m) {
   next();
 }
 
+function filmUrl(id) {
+  return `${FILM_BASE}/film/${id}/`;
+}
+
+function copyTextFallback(value) {
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.appendChild(field);
+  field.select();
+  let copied = false;
+  try { copied = document.execCommand("copy"); } catch {}
+  field.remove();
+  if (!copied) {
+    try { window.prompt("Скопируйте ссылку:", value); } catch {}
+  }
+  return copied;
+}
+
+function copyText(value) {
+  // navigator.clipboard есть только в secure context и может быть запрещён
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(value).then(() => true, () => copyTextFallback(value));
+    }
+  } catch {}
+  return Promise.resolve(copyTextFallback(value));
+}
+
+function shareMovie(id, btn) {
+  const label = btn.textContent;
+  copyText(filmUrl(id)).then((copied) => {
+    if (!copied) return; // prompt уже показал ссылку
+    btn.textContent = "Ссылка скопирована";
+    setTimeout(() => { btn.textContent = label; }, 2000);
+  });
+}
+
 function moviePageHtml(m) {
   const { local, fallback } = posterSources(m);
   const isFav = state.favorites.includes(m.id);
@@ -1312,6 +1353,8 @@ function moviePageHtml(m) {
       <div class="movie-actions">
         <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" title="В избранное">${isFav ? "♥ В избранном" : "＋ В избранное"}</button>
         ${m.trailer ? `<button class="primary trailer-btn" data-trailer="${escapeAttr(m.trailer)}">▶ Трейлер</button>` : ""}
+        <button class="movie-action share-btn" data-share="${m.id}" title="Скопировать постоянную ссылку на фильм">Поделиться</button>
+        <a class="movie-action movie-permalink" href="film/${m.id}/" title="Постоянная страница фильма — её видят поисковики и мессенджеры">Открыть страницу фильма</a>
       </div>
     </div>
   </div>
@@ -1441,6 +1484,11 @@ function bindMovieBodyActions(root) {
     const fav = e.target.closest(".fav-btn");
     if (fav) {
       toggleFavorite(Number(fav.dataset.id));
+      return;
+    }
+    const share = e.target.closest("[data-share]");
+    if (share) {
+      shareMovie(Number(share.dataset.share), share);
       return;
     }
     const trailer = e.target.closest(".trailer-btn");
