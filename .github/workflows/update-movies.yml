@@ -36,6 +36,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r scripts/requirements.txt
+      - name: Restore KP import state
+        uses: actions/cache@v4
+        with:
+          # kp_state.json — состояние импорта КП (что уже пробовали и почему
+          # пропустили). Ключ уникален на прогон, restore-keys берёт последний:
+          # файл меняется каждый запуск, поэтому фиксированный ключ не годится.
+          path: data/kp_state.json
+          key: kp-state-${{ github.run_number }}
+          restore-keys: |
+            kp-state-
       - run: python scripts/fetch_movies.py
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
