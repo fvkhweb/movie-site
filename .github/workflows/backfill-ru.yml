@@ -11,7 +11,7 @@ on:
       limit:
         description: "Сколько описаний попробовать обновить"
         required: false
-        default: "300"
+        default: "60"
 
 permissions:
   contents: write
@@ -35,7 +35,7 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           POISKKINO_API_KEY: ${{ secrets.POISKKINO_API_KEY }}
           KP_UNOFFICIAL_API_KEY: ${{ secrets.KP_UNOFFICIAL_API_KEY }}
-          RU_BACKFILL_LIMIT: ${{ inputs.limit || '300' }}
+          RU_BACKFILL_LIMIT: ${{ inputs.limit || '60' }}
       - name: Validate data
         run: python scripts/validate.py
       - name: Generate film pages

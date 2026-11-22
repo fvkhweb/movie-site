@@ -37,6 +37,10 @@ KPU_API_KEYS = [k.strip() for k in os.environ.get("KP_UNOFFICIAL_API_KEY", "").r
 KPU_ROOT = "https://kinopoiskapiunofficial.tech/api"
 # ~120 фильмов на ключ (поиск + детали + кадры)
 UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", str(120 * max(1, len(KPU_API_KEYS)))))
+# Жёсткий бюджет фактических запросов на ключ: 80% дневного лимита.
+# Фильмовые бюджеты выше остаются, но запросы останавливаются раньше.
+KP_DEV_MAX_REQUESTS = int(os.environ.get("KP_DEV_MAX_REQUESTS", "150"))
+KPU_MAX_REQUESTS = int(os.environ.get("KP_UNOFFICIAL_MAX_REQUESTS", "400"))
 KPU_PREMIUM_LOGGED = set()
 
 # ── Импорт каталога из Кинопоиска ──────────────────────────────
@@ -115,7 +119,7 @@ class KeyPool:
     временно исключаются из rotation.
     """
 
-    def __init__(self, name, keys, exhaust_codes, invalid_codes=(401,)):
+    def __init__(self, name, keys, exhaust_codes, invalid_codes=(401,), max_requests=0):
         self.name = name
         self.keys = list(keys)
         self.exhaust_codes = set(exhaust_codes)
@@ -123,26 +127,44 @@ class KeyPool:
         self._next = 0
         self.exhausted = set()
         self.invalid = set()
+        self.limited = set()
+        self.max_requests = max_requests
         self.requests = [0] * len(self.keys)
         self.success = [0] * len(self.keys)
         self.errors = [0] * len(self.keys)
         self.last_response = None
 
+    def available(self):
+        if not self.keys:
+            return False
+        for i in range(len(self.keys)):
+            if i in self.exhausted or i in self.invalid or i in self.limited:
+                continue
+            if self.max_requests and self.requests[i] >= self.max_requests:
+                continue
+            return True
+        return False
+
     def log_start(self):
         if not self.keys:
             print(f"{self.name}: ключей нет — источник выключен")
             return
-        print(f"{self.name}: ключей {len(self.keys)}")
+        budget = f", бюджет {self.max_requests} запросов/ключ" if self.max_requests else ""
+        print(f"{self.name}: ключей {len(self.keys)}{budget}")
         for i, key in enumerate(self.keys):
             print(f"  #{i + 1}: {mask_key(key)}")
 
     def request(self, do_request):
-        if not self.keys:
+        if not self.available():
             return None
         n = len(self.keys)
         for offset in range(n):
             idx = (self._next + offset) % n
-            if idx in self.exhausted or idx in self.invalid:
+            if idx in self.exhausted or idx in self.invalid or idx in self.limited:
+                continue
+            if self.max_requests and self.requests[idx] >= self.max_requests:
+                self.limited.add(idx)
+                print(f"  {self.name} #{idx + 1}: бюджет {self.max_requests} запросов — ключ остановлен")
                 continue
             self.requests[idx] += 1
             try:
@@ -167,9 +189,7 @@ class KeyPool:
             self._next = (idx + 1) % n
             self.success[idx] += 1
             return r
-        # Все ключи исчерпаны/отключены — отдаём последний ответ, чтобы
-        # вызывающий код мог залогировать HTTP-статус.
-        return self.last_response
+        return None
 
     def log_stats(self):
         if not self.keys:
@@ -182,8 +202,8 @@ class KeyPool:
         print(f"{self.name}: " + ", ".join(parts))
 
 
-KPU_POOL = KeyPool("КП-Unofficial", KPU_API_KEYS, {402, 429})
-DEV_POOL = KeyPool("КП-dev", KP_DEV_KEYS, {402, 429, 403})
+KPU_POOL = KeyPool("КП-Unofficial", KPU_API_KEYS, {402, 429}, max_requests=KPU_MAX_REQUESTS)
+DEV_POOL = KeyPool("КП-dev", KP_DEV_KEYS, {402, 429, 403}, max_requests=KP_DEV_MAX_REQUESTS)
 
 
 def tmdb_get(path, params=None):
@@ -471,6 +491,17 @@ def get_kp_unofficial(title, year, original_title=""):
             description = f.get("description")
             rating = f.get("ratingKinopoisk") or f.get("rating")
 
+            if film_id and score >= 8 and description and poster and rating:
+                time.sleep(0.2)
+                facts = get_kp_facts(film_id)
+                return {
+                    "poster": poster,
+                    "description": description,
+                    "kp_rating": rating,
+                    "facts": facts,
+                    "film_id": film_id,
+                }
+
             time.sleep(0.2)
             # Детали пробуем в двух версиях API: v2.2 отдаёт объект напрямую,
             # v2.1 оборачивает его в {"data": {...}}
@@ -550,15 +581,14 @@ def get_kp_facts(kp_id):
         fr = kpu_get(f"{ver}/films/{kp_id}/facts")
         if fr is None:
             return []
-        if fr.status_code == 200:
-            items = fr.json().get("items") or []
-            facts = [
-                html_mod.unescape(re.sub(r"<[^>]+>", "", i.get("text") or "")).strip()
-                for i in items
-                if i.get("text")
-            ][:3]
-            if facts:
-                return facts
+        if fr.status_code != 200:
+            continue
+        items = fr.json().get("items") or []
+        return [
+            html_mod.unescape(re.sub(r"<[^>]+>", "", i.get("text") or "")).strip()
+            for i in items
+            if i.get("text")
+        ][:3]
     return []
 
 
@@ -662,6 +692,15 @@ def get_kp_data(title, year, original_title="", imdb_id="", director=""):
         for score, movie in ranked[:3]:
             kp_id = movie["id"]
             poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
+            search_rating = (movie.get("rating") or {}).get("kp")
+            description = movie.get("description")
+            if score >= 8 and search_rating and poster and description:
+                return {
+                    "poster": poster,
+                    "description": description,
+                    "kp_rating": search_rating,
+                    "kp_id": kp_id,
+                }
             time.sleep(0.3)
             d_resp = kp_dev_get(f"/{kp_id}")
             if d_resp is None or d_resp.status_code != 200:
@@ -1338,6 +1377,9 @@ def build_catalog():
 
     dev_budget = KP_MAX_MOVIES
     for m in movies_raw:
+        if not DEV_POOL.available():
+            print("  КП-dev: бюджет запросов исчерпан, остальное отложено")
+            break
         if dev_budget <= 0:
             break
         if m.get("kp_id"):
@@ -1371,6 +1413,9 @@ def build_catalog():
     # не тратим запрос на поиск.
     fact_budget = UNOFFICIAL_MAX_MOVIES
     for m in movies_raw:
+        if not KPU_POOL.available():
+            print("  КП-Unofficial: бюджет запросов исчерпан, факты отложены")
+            break
         if fact_budget <= 0:
             break
         if m.get("facts"):
@@ -1438,6 +1483,9 @@ def build_catalog():
     # только для фильмов, у которых кадра ещё нет и есть id Кинопоиска.
     frame_budget = KP_FRAME_MAX
     for m in movies_raw:
+        if not KPU_POOL.available():
+            print("  КП-Unofficial: бюджет запросов исчерпан, кадры отложены")
+            break
         if frame_budget <= 0:
             break
         if m.get("frame"):

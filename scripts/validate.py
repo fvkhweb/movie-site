@@ -138,7 +138,8 @@ def check_movie(movie, ids, current_year):
     if fallback is not None and not isinstance(fallback, str):
         error(f"{mid}: poster_fallback не строка")
     elif fallback and "no-poster" in fallback.lower():
-        error(f"{mid}: poster_fallback ведёт на заглушку ({fallback})")
+        # Заглушка не ломает карточку: основной постер уже проверен выше.
+        warn(f"{mid}: poster_fallback ведёт на заглушку ({fallback})")
 
     trailer = movie.get("trailer")
     if trailer is not None and not isinstance(trailer, str):

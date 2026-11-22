@@ -2,7 +2,7 @@
 
 Работает отдельно от ежедневного пайплайна и меняет только поле description.
 Запуск:
-    RU_BACKFILL_LIMIT=150 python scripts/backfill_ru.py
+    RU_BACKFILL_LIMIT=60 python scripts/backfill_ru.py
 """
 
 import datetime
@@ -17,7 +17,7 @@ import fetch_movies as fm  # noqa: E402
 DATA_DIR = os.environ.get("MOVIE_DATA_DIR", "data")
 MOVIES_PATH = os.path.join(DATA_DIR, "movies.json")
 STATE_PATH = os.environ.get("RU_BACKFILL_STATE", os.path.join(DATA_DIR, "ru_backfill.json"))
-LIMIT = int(os.environ.get("RU_BACKFILL_LIMIT", "150"))
+LIMIT = int(os.environ.get("RU_BACKFILL_LIMIT", "60"))
 COOLDOWN_DAYS = int(os.environ.get("RU_BACKFILL_COOLDOWN_DAYS", "14"))
 
 
