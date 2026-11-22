@@ -45,9 +45,14 @@ def set_version(source, name, value):
 
 def main():
     app_before = read_bytes(APP).decode("utf-8")
-    # Версия в app.js не должна влиять на его же хеш
-    app_hash = digest(DATA_LINE.sub('const DATA_VERSION = "__VERSION__"', app_before).encode("utf-8"))
     data_hash = digest(read_bytes(MOVIES))
+    # Версия в app.js не должна влиять на его же хеш, но хеш данных — должен:
+    # DATA_VERSION живёт внутри app.js, и без этого ?v= у app.js не менялся бы
+    # при обновлении каталога — клиент с кэшем не узнал бы новую версию данных.
+    app_hash = digest(
+        DATA_LINE.sub('const DATA_VERSION = "__VERSION__"', app_before).encode("utf-8")
+        + data_hash.encode("ascii")
+    )
     style_hash = digest(read_bytes(STYLE))
     fonts_hash = digest(read_bytes(FONTS))
 
