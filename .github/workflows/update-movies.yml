@@ -4,20 +4,6 @@ on:
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
-    inputs:
-      import_limit:
-        description: "Сколько новых фильмов Кинопоиска импортировать (0 — не импортировать)"
-        required: false
-        default: "0"
-      import_source:
-        description: "Источник импорта"
-        required: false
-        default: "auto"
-        type: choice
-        options:
-          - auto
-          - dev
-          - unofficial
 
 permissions:
   contents: write
@@ -51,8 +37,6 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           POISKKINO_API_KEY: ${{ secrets.POISKKINO_API_KEY }}
           KP_UNOFFICIAL_API_KEY: ${{ secrets.KP_UNOFFICIAL_API_KEY }}
-          KP_IMPORT_LIMIT: ${{ inputs.import_limit || '0' }}
-          KP_IMPORT_SOURCE: ${{ inputs.import_source || 'auto' }}
       - run: python scripts/bump_assets.py
       - run: python scripts/validate.py
       - run: python scripts/generate_pages.py
