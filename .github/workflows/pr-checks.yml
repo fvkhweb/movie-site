@@ -1,0 +1,25 @@
+name: PR checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r scripts/requirements.txt
+      - name: Validate data
+        run: python scripts/validate.py
+      - name: Check JS syntax
+        run: |
+          node --check app.js
+          node --check sw.js
+      - name: Film pages and sitemap are up to date
+        run: |
+          python scripts/generate_pages.py
+          git diff --exit-code -- film sitemap.xml
