@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; base-uri 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Политика конфиденциальности — Что посмотреть?</title>
+  <meta name="description" content="Какие данные собирает сайт «Что посмотреть?», что хранится в браузере и как отказаться от аналитики.">
+  <style>
+    :root{color-scheme:dark}
+    *{box-sizing:border-box}
+    body{margin:0;background:#090b0f;color:#dce2eb;font-family:Manrope,Arial,sans-serif;line-height:1.7}
+    main{max-width:820px;margin:0 auto;padding:34px 20px 70px}
+    .back{color:#8a8f9a;text-decoration:none;font-size:13px;font-weight:700}
+    .back:hover{color:#7fa0ff}
+    h1{font-size:clamp(24px,4vw,34px);line-height:1.2;margin:26px 0 6px}
+    h2{font-size:17px;margin:30px 0 8px}
+    p,li{color:#a9b4c2;font-size:14px}
+    ul{padding-left:20px}
+    li{margin-bottom:6px}
+    a{color:#7fa0ff}
+    .updated{color:#6f7783;font-size:12px}
+    .note{margin-top:34px;color:#6f7783;font-size:11px}
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="./">← Что посмотреть?</a>
+    <h1>Политика конфиденциальности</h1>
+    <p class="updated">Действует с 22 ноября 2026 года.</p>
+
+    <p>Сайт «Что посмотреть?» — статический каталог с данными TMDB и Кинопоиска. Аккаунтов нет,
+      персональные данные мы не просим и не храним на сервере.</p>
+
+    <h2>Что собирает аналитика</h2>
+    <ul>
+      <li>Используется Яндекс.Метрика (счётчик 114238596): просмотры страниц, источник перехода,
+        сведения о браузере и устройстве, карта кликов. Запись сессий (Вебвизор) отключена.</li>
+      <li>Скрипт Метрики загружается только после нажатия «Разрешить аналитику» в баннере согласия.
+        Выбор запоминается в браузере, его можно сбросить, очистив данные сайта.</li>
+      <li>Метрика может ставить собственные cookie (идентификатор посетителя). Их срок жизни
+        и правила задаёт Яндекс, подробности — в документации Метрики.</li>
+    </ul>
+
+    <h2>Что хранится в браузере</h2>
+    <ul>
+      <li><b>localStorage</b>: список избранных фильмов, выбор темы, отметка о согласии на аналитику.</li>
+      <li><b>cache</b> (service worker): копия страницы, скриптов, постеров и данных каталога —
+        чтобы сайт открывался быстрее и работал при перебоях сети.</li>
+      <li>Эти данные остаются на вашем устройстве, на сервер не отправляются.</li>
+    </ul>
+
+    <h2>Как отказаться</h2>
+    <ul>
+      <li>Нажать «Только необходимое» в баннере согласия или очистить данные сайта в настройках браузера.</li>
+      <li>Блокировать скрипты сторонних доменов расширением браузера или отключить выполнение скриптов для
+        <code>mc.yandex.ru</code>.</li>
+      <li>Использовать режим без cookie / приватное окно.</li>
+    </ul>
+
+    <h2>Сторонние ресурсы</h2>
+    <p>Постеры и кадры загружаются с сервисов TMDB и Яндекса через прокси изображений
+      (wsrv.nl, images.weserv.nl, imagetmdb.com, cdn.statically.io); эти сервисы видят IP-адрес и запрошенный файл.
+      Трейлеры открываются во встроенном проигрывателе YouTube.</p>
+
+    <h2>Вопросы и удаление данных</h2>
+    <p>Написать владельцу проекта можно в <a href="https://github.com/fvkhweb/movie-site/issues" target="_blank" rel="noopener">issues репозитория на GitHub</a>.
+      Данные, которые остались на вашем устройстве, удаляются очисткой данных сайта в браузере.</p>
+
+    <p class="note">Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB. Права на постеры и описания — у правообладателей.</p>
+  </main>
+</body>
+</html>

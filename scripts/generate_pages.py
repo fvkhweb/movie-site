@@ -186,7 +186,7 @@ def main():
             shutil.rmtree(path)
             removed += 1
 
-    urls = [f"{BASE}/"] + [f"{BASE}/film/{mid}/" for mid in sorted(ids)]
+    urls = [f"{BASE}/", f"{BASE}/privacy.html"] + [f"{BASE}/film/{mid}/" for mid in sorted(ids)]
     sitemap = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
