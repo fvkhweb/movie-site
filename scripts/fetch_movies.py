@@ -41,6 +41,9 @@ UNOFFICIAL_MAX_MOVIES = int(os.environ.get("UNOFFICIAL_MAX_MOVIES", str(120 * ma
 # Фильмовые бюджеты выше остаются, но запросы останавливаются раньше.
 KP_DEV_MAX_REQUESTS = int(os.environ.get("KP_DEV_MAX_REQUESTS", "150"))
 KPU_MAX_REQUESTS = int(os.environ.get("KP_UNOFFICIAL_MAX_REQUESTS", "400"))
+# Ниже порога матч не принимаем даже после загрузки деталей.
+KP_MIN_MATCH_SCORE = 6
+KP_HIGH_MATCH_SCORE = 8
 KPU_PREMIUM_LOGGED = set()
 
 # ── Импорт каталога из Кинопоиска ──────────────────────────────
@@ -54,6 +57,8 @@ KP_IMPORT_YEAR_TO = int(os.environ.get("KP_IMPORT_YEAR_TO", str(datetime.date.to
 # KP-ID живут в отдельном диапазоне, чтобы не пересекаться с TMDB-ID.
 KP_ID_OFFSET = 1_000_000_000
 KP_FRAME_MAX = int(os.environ.get("KP_FRAME_MAX", "200"))
+# Ручной аудит уже сохранённых КП-полей: 0 — выключен.
+KP_AUDIT_LIMIT = int(os.environ.get("KP_AUDIT_LIMIT", "0"))
 KP_STATE_FILE = "data/kp_state.json"
 KP_COOLDOWN_DAYS = {
     "not_found": int(os.environ.get("KP_COOLDOWN_NOT_FOUND_DAYS", "14")),
@@ -291,6 +296,10 @@ def kp_match_score(query_names, query_year, cand_names, cand_year,
     if qy == cy:
         score += 4
     elif abs(qy - cy) == 1:
+        # Соседний год — только при совпадении оригинального названия.
+        # Иначе одноимённый фильм другого года даёт ложный матч.
+        if not (q_orig and c_orig and q_orig == c_orig):
+            return -1
         score += 1
     else:
         return -1
@@ -441,7 +450,7 @@ def enrich_movie(m):
     }
 
 
-def get_kp_unofficial(title, year, original_title=""):
+def get_kp_unofficial(title, year, original_title="", director="", imdb_id=""):
     """Резервный источник данных о фильме: Kinopoisk Unofficial API.
     Формат поиска v2.2: {"total": N, "items": [...]} с полем kinopoiskId."""
     if not KPU_API_KEYS:
@@ -477,6 +486,9 @@ def get_kp_unofficial(title, year, original_title=""):
                 x.get("year"),
                 query_original=original_title,
                 cand_original=x.get("nameOriginal") or x.get("nameEn") or "",
+                query_imdb=imdb_id,
+                cand_imdb=x.get("imdbId") or "",
+                query_director=director,
             )
             if score >= 0:
                 ranked.append((score, x))
@@ -489,9 +501,10 @@ def get_kp_unofficial(title, year, original_title=""):
             film_id = f.get("filmId") or f.get("kinopoiskId")
             poster = f.get("posterUrl") or f.get("posterUrlPreview") or ""
             description = f.get("description")
-            rating = f.get("ratingKinopoisk") or f.get("rating")
+            # Только рейтинг Кинопоиска: поле rating может означать другое.
+            rating = f.get("ratingKinopoisk")
 
-            if film_id and score >= 8 and description and poster and rating:
+            if film_id and score >= KP_HIGH_MATCH_SCORE and description and poster and rating:
                 time.sleep(0.2)
                 facts = get_kp_facts(film_id)
                 return {
@@ -524,10 +537,14 @@ def get_kp_unofficial(title, year, original_title=""):
                     details_data.get("year"),
                     query_original=original_title,
                     cand_original=details_data.get("nameOriginal") or details_data.get("nameEn") or "",
+                    query_imdb=imdb_id,
+                    cand_imdb=details_data.get("imdbId") or "",
+                    query_director=director,
+                    cand_director=details_data.get("director") or "",
                 )
-                if score < 0:
+                if score < KP_MIN_MATCH_SCORE:
                     continue
-            elif score < 8:
+            elif score < KP_HIGH_MATCH_SCORE:
                 # Детали не пришли — без проверки берём только явное совпадение
                 continue
 
@@ -605,6 +622,111 @@ def get_kp_frame(kp_id):
         if frames and frames[0].get("image"):
             return frames[0]["image"]
     return ""
+
+
+KP_CLEAR_FIELDS = ("kp_id", "kp_rating", "facts", "frame", "poster_fallback")
+
+
+def clear_kp_fields(movie):
+    """Убирает данные КП, если сопоставление не подтвердилось."""
+    for field in KP_CLEAR_FIELDS:
+        movie.pop(field, None)
+    if movie.get("description_source") == "kp":
+        movie.pop("description", None)
+        movie.pop("description_source", None)
+
+
+def get_kp_details(kp_id):
+    """Детали фильма по id КП (две версии API). None — сеть/лимит."""
+    if not KPU_API_KEYS or not kp_id:
+        return None
+    for ver in ("v2.2", "v2.1"):
+        r = kpu_get(f"{ver}/films/{kp_id}")
+        if r is None:
+            return None
+        if r.status_code == 200:
+            data = r.json()
+            return data.get("data") if isinstance(data.get("data"), dict) else data
+    return None
+
+
+def audit_kp_matches(movies, state, limit):
+    """Перепроверяет сохранённые КП-поля и чистит ложные сопоставления.
+
+    С id КП сверяем карточку по названию/году/оригиналу/IMDb. Без id —
+    ищем заново с ужесточённым матчингом. Транзиентные ошибки API не
+    считаем приговором: поля остаются до следующего прогона.
+    """
+    if limit <= 0 or not KPU_POOL.available():
+        return
+    candidates = [m for m in movies if any(m.get(f) for f in KP_CLEAR_FIELDS)]
+    # Сначала записи с id: их проверка дешевле и надёжнее.
+    candidates.sort(key=lambda m: (0 if m.get("kp_id") else 1, -(m.get("popularity") or 0)))
+    checked = kept = cleared = 0
+    for m in candidates:
+        if checked >= limit or not KPU_POOL.available():
+            break
+        checked += 1
+        kp_id = m.get("kp_id")
+        if kp_id:
+            details = get_kp_details(kp_id)
+            if details is None:
+                kp_mark(state, m, "error")
+                continue
+            score = kp_match_score(
+                [m.get("title"), m.get("original_title")], m.get("year"),
+                [details.get("nameRu"), details.get("nameEn"), details.get("nameOriginal")],
+                details.get("year"),
+                query_original=m.get("original_title") or "",
+                cand_original=details.get("nameOriginal") or details.get("nameEn") or "",
+                query_imdb=m.get("imdb_id") or "",
+                cand_imdb=details.get("imdbId") or "",
+                query_director=m.get("director") or "",
+                cand_director=details.get("director") or "",
+            )
+            if score < KP_MIN_MATCH_SCORE:
+                print(f"  КП-аудит: {m['id']} {m.get('title')} — id {kp_id} не совпал, очищаю")
+                clear_kp_fields(m)
+                kp_mark(state, m, "not_found")
+                kp_mark(state, m, "no_facts")
+                cleared += 1
+            else:
+                rating = details.get("ratingKinopoisk")
+                if rating:
+                    m["kp_rating"] = round(rating, 1)
+                kept += 1
+            time.sleep(0.2)
+            continue
+
+        kp = get_kp_unofficial(
+            m.get("title"), m.get("year"), m.get("original_title"),
+            m.get("director") or "", m.get("imdb_id") or "",
+        )
+        if kp and kp.get("error"):
+            kp_mark(state, m, "error")
+            continue
+        if kp and kp.get("film_id"):
+            m["kp_id"] = kp["film_id"]
+            if kp.get("kp_rating"):
+                m["kp_rating"] = round(kp["kp_rating"], 1)
+            if kp.get("description"):
+                m["description"] = kp["description"]
+                m["description_source"] = "kp"
+            if kp.get("poster") and not (m.get("poster") or "").startswith("http"):
+                m["poster_fallback"] = kp["poster"]
+            if kp.get("facts"):
+                m["facts"] = kp["facts"]
+            kp_clear(state, m, "not_found")
+            kp_clear(state, m, "error")
+            kept += 1
+        else:
+            print(f"  КП-аудит: {m['id']} {m.get('title')} — матч не подтвердился, очищаю")
+            clear_kp_fields(m)
+            kp_mark(state, m, "not_found")
+            kp_mark(state, m, "no_facts")
+            cleared += 1
+        time.sleep(0.2)
+    print(f"КП-аудит: проверено {checked}, подтверждено {kept}, очищено {cleared}")
 
 
 def get_recommendations(movie_id):
@@ -694,7 +816,7 @@ def get_kp_data(title, year, original_title="", imdb_id="", director=""):
             poster = (movie.get("poster") or {}).get("url") or (movie.get("poster") or {}).get("previewUrl")
             search_rating = (movie.get("rating") or {}).get("kp")
             description = movie.get("description")
-            if score >= 8 and search_rating and poster and description:
+            if score >= KP_HIGH_MATCH_SCORE and search_rating and poster and description:
                 return {
                     "poster": poster,
                     "description": description,
@@ -705,7 +827,7 @@ def get_kp_data(title, year, original_title="", imdb_id="", director=""):
             d_resp = kp_dev_get(f"/{kp_id}")
             if d_resp is None or d_resp.status_code != 200:
                 print(f"  КП детали {kp_id}: HTTP {d_resp.status_code}")
-                if score < 8:
+                if score < KP_HIGH_MATCH_SCORE:
                     continue
                 return {
                     "poster": poster,
@@ -730,7 +852,7 @@ def get_kp_data(title, year, original_title="", imdb_id="", director=""):
                 query_director=director,
                 cand_director=cand_director,
             )
-            if full_score < 0:
+            if full_score < KP_MIN_MATCH_SCORE:
                 continue
             return {
                 # Постер Кинопоиска лежит на Яндекс.CDN и открывается из РФ
@@ -1339,7 +1461,7 @@ def build_catalog():
     kp_state = load_kp_state()
     KP_FIELDS = (
         "kp_rating", "facts", "frame", "poster", "poster_fallback",
-        "kp_id", "source",
+        "kp_id", "source", "description_source",
     )
 
     for m in movies_raw:
@@ -1362,6 +1484,8 @@ def build_catalog():
             movies_raw.append(o)
             archived += 1
     print(f"архив: {archived} фильмов перенесены из вчерашней базы")
+
+    audit_kp_matches(movies_raw, kp_state, KP_AUDIT_LIMIT)
 
     # Кинопоиск — обогащение по убыванию популярности, только для фильмов
     # без рейтинга/фактов. Cooldown не даёт каждый день тратить квоту на
@@ -1399,6 +1523,7 @@ def build_catalog():
                 m["kp_id"] = kp["kp_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
+                m["description_source"] = "kp"
             if kp.get("kp_rating"):
                 m["kp_rating"] = round(kp["kp_rating"], 1)
             if kp.get("poster"):
@@ -1437,6 +1562,7 @@ def build_catalog():
                 m["kp_id"] = kp["film_id"]
             if kp.get("description"):
                 m["description"] = kp["description"]
+                m["description_source"] = "kp"
             if kp.get("kp_rating"):
                 m["kp_rating"] = round(kp["kp_rating"], 1)
             if kp.get("poster") and not (m.get("poster") or "").startswith("http"):

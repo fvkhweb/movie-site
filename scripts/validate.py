@@ -81,6 +81,10 @@ def check_movie(movie, ids, current_year):
                 datetime.date.fromisoformat(release)
             except ValueError:
                 error(f"{mid}: release_date={release!r} — несуществующая дата")
+            else:
+                today = datetime.date.today().isoformat()
+                if release > today and movie.get("kp_rating") and not movie.get("kp_id"):
+                    warn(f"{mid}: KP-рейтинг у невышедшего фильма без kp_id")
 
     for field, low, high in (("rating", 0, 10), ("kp_rating", 0, 10)):
         value = movie.get(field)
