@@ -26,6 +26,16 @@ def read_bytes(path):
         return f.read()
 
 
+def read_text(path):
+    with open(path, "rb") as f:
+        return f.read().decode("utf-8")
+
+
+def digest_text(path):
+    # CRLF в рабочей копии Windows не должен менять хеш: CI считает по LF
+    return digest(read_text(path).replace("\r\n", "\n").encode("utf-8"))
+
+
 def write_if_changed(path, old, new):
     if old == new:
         return False
@@ -44,17 +54,19 @@ def set_version(source, name, value):
 
 
 def main():
-    app_before = read_bytes(APP).decode("utf-8")
-    data_hash = digest(read_bytes(MOVIES))
+    app_before = read_text(APP)
+    data_hash = digest(read_bytes(MOVIES).replace(b"\r\n", b"\n"))
     # Версия в app.js не должна влиять на его же хеш, но хеш данных — должен:
     # DATA_VERSION живёт внутри app.js, и без этого ?v= у app.js не менялся бы
     # при обновлении каталога — клиент с кэшем не узнал бы новую версию данных.
     app_hash = digest(
-        DATA_LINE.sub('const DATA_VERSION = "__VERSION__"', app_before).encode("utf-8")
+        DATA_LINE.sub('const DATA_VERSION = "__VERSION__"', app_before)
+        .replace("\r\n", "\n")
+        .encode("utf-8")
         + data_hash.encode("ascii")
     )
-    style_hash = digest(read_bytes(STYLE))
-    fonts_hash = digest(read_bytes(FONTS))
+    style_hash = digest_text(STYLE)
+    fonts_hash = digest_text(FONTS)
 
     app_after = DATA_LINE.sub(lambda m: m.group(1) + data_hash + m.group(2), app_before)
 
