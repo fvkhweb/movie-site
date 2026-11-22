@@ -15,6 +15,10 @@ on:
         description: "Десятилетия через запятую"
         required: false
         default: "1990,2000,2010,2020"
+      max_pages:
+        description: "Сколько страниц TMDB просматривать на десятилетие (20 фильмов/страница)"
+        required: false
+        default: "100"
       min_votes:
         description: "Минимум голосов TMDB"
         required: false
@@ -53,6 +57,7 @@ jobs:
           TASTEDIVE_API_KEY: ${{ secrets.TASTEDIVE_API_KEY }}
           IMPORT_LIMIT: ${{ inputs.import_limit }}
           IMPORT_DECADES: ${{ inputs.decades }}
+          IMPORT_MAX_PAGES: ${{ inputs.max_pages || '100' }}
           IMPORT_MIN_VOTES: ${{ inputs.min_votes }}
           IMPORT_LOCAL_POSTER_VOTES: ${{ inputs.local_poster_votes }}
           OMDB_MAX_MOVIES: "500"

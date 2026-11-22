@@ -38,7 +38,7 @@ def parse_decades(raw):
 IMPORT_LIMIT = int(os.environ.get("IMPORT_LIMIT", "0"))
 IMPORT_DECADES = parse_decades(os.environ.get("IMPORT_DECADES", "1990,2000,2010,2020"))
 IMPORT_MIN_VOTES = int(os.environ.get("IMPORT_MIN_VOTES", "200"))
-IMPORT_MAX_PAGES = int(os.environ.get("IMPORT_MAX_PAGES", "25"))
+IMPORT_MAX_PAGES = int(os.environ.get("IMPORT_MAX_PAGES", "100"))
 IMPORT_LOCAL_POSTER_VOTES = int(os.environ.get("IMPORT_LOCAL_POSTER_VOTES", "500"))
 IMPORT_WORKERS = int(os.environ.get("IMPORT_WORKERS", "6"))
 OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "").strip()
@@ -136,9 +136,12 @@ def discover_page(start, end, page):
 def collect_candidates(limit):
     """Собирает кандидатов по десятилетиям, не давая одному десятилетию съесть всё."""
     target = max(limit * 2, limit + 100)
+    if IMPORT_MAX_PAGES * 20 < target:
+        print(f"  предупреждение: {IMPORT_MAX_PAGES} страниц × 20 < цели {target}; увеличь IMPORT_MAX_PAGES")
     index = fm.build_existing_index(load_movies())
     seen_ids = {m["id"] for m in load_movies()}
     candidates = []
+    skipped = {"existing": 0, "duplicate": 0, "no_id": 0}
     done = set()
 
     for page in range(1, IMPORT_MAX_PAGES + 1):
@@ -155,9 +158,17 @@ def collect_candidates(limit):
             if not results:
                 done.add(start)
                 continue
+            added = 0
+            page_existing = 0
+            page_duplicate = 0
+            page_no_id = 0
             for item in results:
                 mid = item.get("id")
-                if not mid or mid in seen_ids:
+                if not mid:
+                    page_no_id += 1
+                    continue
+                if mid in seen_ids:
+                    page_existing += 1
                     continue
                 year = (item.get("release_date") or "")[:4]
                 if fm.is_duplicate({
@@ -165,18 +176,31 @@ def collect_candidates(limit):
                     "original_title": item.get("original_title"),
                     "year": year,
                 }, index):
+                    page_duplicate += 1
                     continue
                 seen_ids.add(mid)
                 item["_decade"] = start
                 candidates.append(item)
+                added += 1
                 if len(candidates) >= target:
                     break
+            skipped["existing"] += page_existing
+            skipped["duplicate"] += page_duplicate
+            skipped["no_id"] += page_no_id
             total_pages = data.get("total_pages") or 0
             if total_pages and page >= total_pages:
                 done.add(start)
-            print(f"  {start}-е: страница {page}/{total_pages or '?'}, кандидатов {len(candidates)}")
+            print(
+                f"  {start}-е: страница {page}/{total_pages or '?'}, +{added}, "
+                f"всего {len(candidates)} (в каталоге {page_existing}, "
+                f"дубли {page_duplicate}, без id {page_no_id})"
+            )
             if len(candidates) >= target:
                 break
+    print(
+        f"Пропущено: уже в каталоге {skipped['existing']}, "
+        f"дубли по названию {skipped['duplicate']}, без id {skipped['no_id']}"
+    )
     return candidates
 
 
