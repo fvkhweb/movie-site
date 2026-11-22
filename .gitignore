@@ -15,3 +15,6 @@ opencode.jsonc
 
 # Отчёты импорта генерируются воркфлоу, в истории git не нужны
 docs/imports/
+
+# Состояние импорта КП: экономит квоту API, живёт в actions/cache
+data/kp_state.json
