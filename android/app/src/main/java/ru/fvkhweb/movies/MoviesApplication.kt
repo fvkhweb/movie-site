@@ -34,15 +34,19 @@ class AppContainer(context: Context) {
     val repository = CatalogRepository(context, api)
     val favorites = FavoritesStore(context)
 
-    /** Скачивание APK — отдельный клиент без HTTP-кэша. */
-    val updater = AppUpdater(
-        context,
-        OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(10, TimeUnit.MINUTES)
-            .build(),
-    )
+    /** Скачивание APK — отдельный клиент без HTTP-кэша. В сборке RuStore его нет. */
+    val updater: AppUpdater? = if (BuildConfig.AUTOUPDATE_ENABLED) {
+        AppUpdater(
+            context,
+            OkHttpClient.Builder()
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .callTimeout(10, TimeUnit.MINUTES)
+                .build(),
+        )
+    } else {
+        null
+    }
 }
 
 class MoviesApplication : Application(), ImageLoaderFactory {

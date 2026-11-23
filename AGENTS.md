@@ -45,6 +45,7 @@
 | `android/give-apk.ps1` | Выдать человеку APK актуального релиза (копия в Downloads) |
 | `android/keystore.properties` | Путь и пароли к ключу (в git не попадает) |
 | `android/signing-fingerprint.txt` | SHA-256 сертификата подписи |
+| `android/app/src/rustore/AndroidManifest.xml` | Манифест сборки для RuStore (без установки APK) |
 | `android/app/src/main/java/ru/fvkhweb/movies/data/update/` | Клиент автообновления |
 | `android/app/src/main/java/ru/fvkhweb/movies/ui/UpdateDialog.kt` | Диалог «вышла обнова» |
 | `android/README.md` | Сборка, архитектура, ограничения |
@@ -70,6 +71,31 @@ cd movie-site\android
 
 Флаги: `-Force` — разрешить тот же/меньший `versionCode` (только для перепубликации),
 `-NoPush` — собрать и положить файлы без коммита.
+
+## Версия для RuStore
+
+Отдельный build type без автообновления через GitHub:
+
+```powershell
+cd movie-site\android
+.\gradlew.bat assembleRustore
+```
+
+Чем отличается от обычной release-сборки:
+
+- нет разрешения `REQUEST_INSTALL_PACKAGES` и `FileProvider` (манифест
+  `app/src/rustore/AndroidManifest.xml`);
+- `BuildConfig.AUTOUPDATE_ENABLED = false`: проверка `latest.json`, скачивание и
+  установка APK не запускаются, R8 вырезает код обновления;
+- версия, `applicationId` и ключ подписи те же, что у обычной release-сборки,
+  поэтому магазинная версия ставится поверх и наоборот.
+
+APK для загрузки в консоль RuStore: `android/app/build/outputs/apk/rustore/app-rustore.apk`.
+Это артефакт для магазина, людям его не раздаём.
+
+`release.ps1` RuStore-сборку не публикует — загрузка в консоль RuStore вручную.
+В RuStore нельзя отставать от версии на GitHub: при каждом релизе загружай туда
+сборку с тем же `versionName` / `versionCode` из `version.properties`.
 
 ## Как отдать APK человеку
 

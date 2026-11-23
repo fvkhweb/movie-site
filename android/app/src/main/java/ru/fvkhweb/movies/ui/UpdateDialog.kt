@@ -61,7 +61,9 @@ import ru.fvkhweb.movies.ui.theme.White
  */
 @Composable
 fun UpdateHost(container: AppContainer, modifier: Modifier = Modifier) {
-    val viewModel: UpdateViewModel = viewModel(factory = UpdateViewModel.factory(container.updater))
+    if (!BuildConfig.AUTOUPDATE_ENABLED) return
+    val updater = container.updater ?: return
+    val viewModel: UpdateViewModel = viewModel(factory = UpdateViewModel.factory(updater))
     val state by viewModel.state.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
 

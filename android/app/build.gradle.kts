@@ -24,7 +24,9 @@ val releaseKeyFile = keystoreProps.getProperty("storeFile")
 // Без ключа release-сборка не должна молча подписываться debug-ключом:
 // такое приложение не установится поверх и сломает обновления.
 val releaseRequested = gradle.startParameter.taskNames.any {
-    it.contains("release", ignoreCase = true) || it.contains("bundle", ignoreCase = true)
+    it.contains("release", ignoreCase = true) ||
+        it.contains("bundle", ignoreCase = true) ||
+        it.contains("rustore", ignoreCase = true)
 }
 if (releaseKeyFile == null && releaseRequested) {
     throw GradleException(
@@ -43,6 +45,8 @@ android {
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersionName
+        // Сборка rustore переопределяет на false: никаких обновлений с GitHub.
+        buildConfigField("boolean", "AUTOUPDATE_ENABLED", "true")
     }
 
     signingConfigs {
@@ -76,6 +80,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // Для RuStore: та же подпись и версия, но без клиента автообновления.
+        create("rustore") {
+            initWith(getByName("release"))
+            buildConfigField("boolean", "AUTOUPDATE_ENABLED", "false")
         }
     }
 

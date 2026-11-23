@@ -65,6 +65,22 @@ SHA-256 и подписи APK, запуск системного установ�
 
 Правила для людей и ИИ-агентов — в `../AGENTS.md`.
 
+## Сборка для RuStore
+
+Отдельная сборка без автообновления через GitHub:
+
+```powershell
+./gradlew assembleRustore
+```
+
+APK: `android/app/build/outputs/apk/rustore/app-rustore.apk` — его загружают в
+консоль RuStore. В этой версии нет `REQUEST_INSTALL_PACKAGES` и `FileProvider`,
+а клиент автообновления отключён (`BuildConfig.AUTOUPDATE_ENABLED = false`).
+Версия, `applicationId` и подпись совпадают с обычным релизом.
+
+Версия в RuStore не должна отставать от версии на GitHub: при каждом релизе
+загружай в магазин сборку с теми же `versionCode` и `versionName`.
+
 ## Как это устроено
 
 ```text
