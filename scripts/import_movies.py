@@ -557,6 +557,9 @@ def run():
     if cast_ok:
         for movie in movies:
             movie.pop("cast", None)
+    # Рекомендации TMDB почти всегда ведут на фильмы вне каталога:
+    # оставляем только существующие id и добираем похожие из базы.
+    fm.repair_similar(movies)
     save_movies_atomic(movies)
     print(f"Добавлено в movies.json: {len(valid)}, всего теперь {len(movies)}")
     try:
