@@ -146,20 +146,24 @@ header{height:76px;border-bottom:1px solid var(--line);display:flex;align-items:
 .genre-card b{font:600 15px Unbounded}
 .genre-card span{font:600 10px Montserrat;letter-spacing:.5px;color:var(--muted)}
 
-/* ── Подборки ── */
-.collection{margin-bottom:44px}
-.collection:last-child{margin-bottom:0}
-.collection .section-title{font-size:14px}
-/* Сетка как у каталога: длинный топ листается привычной вертикальной
-   прокруткой, а не уезжает вбок */
-.coll-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:24px 16px}
-.coll-card{position:relative;display:block;color:inherit;text-decoration:none;cursor:pointer}
-.coll-card img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:9px;border:1px solid #ffffff0d;background:var(--panel2);display:block;transition:transform .35s,filter .35s}
-.coll-card:hover img{transform:scale(1.04);filter:brightness(.85)}
-.coll-rank{position:absolute;z-index:1;top:8px;left:8px;background:rgba(9,11,15,.8);border:1px solid #ffffff24;border-radius:4px;padding:5px 7px;font:10px 'DM Mono';color:#dce5ff}
-.coll-all{display:block;margin:18px auto 0;height:44px;padding:0 22px;border:1px solid var(--line);border-radius:9px;background:transparent;color:#c6ccd5;font:600 12px Manrope;letter-spacing:.4px;cursor:pointer;transition:border-color .2s,color .2s}
-.coll-all:hover{border-color:var(--blue);color:#fff}
-.coll-all span{color:var(--blue);margin-left:6px}
+/* ── Подборки: плитки на #collections ── */
+.coll-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:26px 18px;padding-bottom:80px}
+.coll-tile{display:block;color:inherit;text-decoration:none;cursor:pointer}
+.coll-tile:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:12px}
+/* Обложка-коллаж из первых постеров: видно, что внутри подборки */
+.coll-cover{position:relative;aspect-ratio:3/2;display:grid;gap:2px;border-radius:10px;overflow:hidden;background:var(--panel2);border:1px solid #ffffff0d}
+.coll-cover img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s,filter .35s}
+.coll-cover-1{grid-template-columns:1fr}
+.coll-cover-2{grid-template-columns:1fr 1fr}
+.coll-cover-3,.coll-cover-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.coll-cover-3 img:first-child{grid-row:span 2}
+.coll-tile:hover .coll-cover img{transform:scale(1.05);filter:brightness(.82)}
+.coll-tile:hover .coll-tile-title{color:#fff}
+.coll-cover-count{position:absolute;right:8px;bottom:8px;z-index:1;background:rgba(9,11,15,.82);border:1px solid #ffffff24;border-radius:4px;padding:4px 7px;font:10px 'DM Mono';color:#dce5ff}
+.coll-tile-title{margin-top:12px;font:700 15px/1.3 Manrope;color:#e7ecf4;transition:color .2s}
+.coll-tile-meta{margin-top:4px;font:600 10px Montserrat;letter-spacing:.6px;color:var(--muted);text-transform:uppercase}
+/* Ранг фильма на странице одной подборки */
+.poster-rank{position:absolute;z-index:1;top:10px;right:10px;background:rgba(9,11,15,.8);border:1px solid #ffffff24;border-radius:4px;padding:5px 7px;font:10px 'DM Mono';color:#dce5ff}
 
 /* ── Подвал ── */
 footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-size:11px}
@@ -271,6 +275,8 @@ body[data-view="movie"] main{display:none}
 body[data-view="movie"] footer{display:none}
 body[data-view="collections"] main{display:none}
 body[data-view="collections"] footer{display:none}
+body[data-view="collection"] main{display:none}
+body[data-view="collection"] footer{display:none}
 body[data-view="rails"] main{display:none}
 body[data-view="rails"] footer{display:none}
 /* Кадр на всю ширину в пропорции 16:9 — виден практически целиком */
@@ -327,10 +333,9 @@ body[data-view="rails"] footer{display:none}
 .coll-page-head{padding:34px 0 6px}
 .coll-page-head .movie-back{position:static;display:inline-flex;align-items:center;margin-bottom:18px}
 .coll-page-head .section-head{margin:0 0 26px}
-#collectionsPage .coll-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:26px 16px}
-#collectionsPage .collection{margin-bottom:52px}
-#collectionsPage .collection:last-child{margin-bottom:0}
 body[data-view="collections"] footer{display:none}
+body[data-view="collection"] footer{display:none}
+.coll-page-head a.movie-back{text-decoration:none}
 
 /* ── Страницы трендов/анонсов: заголовки-ссылки на главной ── */
 .section-title a{color:inherit;text-decoration:none}
@@ -386,7 +391,7 @@ body[data-view="collections"] footer{display:none}
   .movie-actions .fav-btn,.movie-actions .trailer-btn,.movie-actions .movie-action{flex:1 1 auto;text-align:center}
   .movie-hero .trailer-wrap{height:52vw}
   .movie-hero .trailer-wrap iframe{height:52vw}
-  #collectionsPage .coll-row{gap:18px 10px;grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}
+  .coll-tiles{gap:20px 12px;padding-bottom:50px}
   .movie-page-body{padding-bottom:50px}
   .movie-page-body .cast-card img,.movie-page-body .cast-photo-empty{width:86px;height:86px}
   .movie-page-body .cast-row{gap:18px 10px;grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}

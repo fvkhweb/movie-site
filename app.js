@@ -46,6 +46,7 @@ const state = {
   cast: null,   // { movieId: [{id, name, character, photo}] }
   people: null, // [{ id, name, photo, movies: [] }]
   collections: [], // пользовательские подборки (data/collections.json)
+  collId: null, // открытая подборка (#collections/<id>)
   genre: "",    // активный жанр (чипсы)
   countries: [], // страны из данных: [{ name, label, count }]
   countryInclude: new Set(), // показывать только эти страны
@@ -282,7 +283,9 @@ async function loadData() {
     state.people = people.status === "fulfilled" ? people.value : null;
     if (collections.status === "fulfilled" && collections.value?.collections) {
       state.collections = collections.value.collections;
-      if (document.body.dataset.view === "collections") renderCollectionsPage();
+      const view = document.body.dataset.view;
+      if (view === "collections") renderCollectionsPage();
+      else if (view === "collection") renderCollectionPage();
     }
     // Если пользователь уже что-то ищет — пересчитаем с учётом актёров
     if (el("search").value.trim() || state.actor) render();
@@ -738,6 +741,7 @@ function cardHtml(m, opts = {}) {
         <img alt="${escapeAttr(m.title || "")}" loading="lazy" decoding="async"
              src="${escapeAttr(local)}" ${fallback ? `data-fallback="${escapeAttr(fallback)}"` : ""}>
         ${rating ? `<span class="poster-rating">★ ${rating}</span>` : ""}
+        ${opts.rank ? `<span class="poster-rank">${String(opts.rank).padStart(3, "0")}</span>` : ""}
         ${soon && !opts.date ? `<span class="poster-soon">СКОРО В КИНО</span>` : ""}
       </div>
       <div class="movie-title">${escapeHtml(m.title || "Без названия")}</div>
@@ -889,7 +893,7 @@ function renderGenres() {
   });
 }
 
-/* ── Подборки (отдельная страница #collections) ────── */
+/* ── Подборки (#collections — список, #collections/<id> — одна подборка) ── */
 
 function renderCollectionsPage() {
   const wrap = el("collectionsList");
@@ -902,27 +906,61 @@ function renderCollectionsPage() {
     .map((c) => {
       const list = c.items.map(movieById).filter(Boolean);
       if (!list.length) return "";
-      const meta = `${c.total} ${filmsWord(c.total)} · В КАТАЛОГЕ ${list.length}/${c.total}`;
-      const cards = list
-        .map(
-          (m, i) => `
-      <a class="coll-card anim" href="#movie/${m.id}" data-id="${m.id}" title="${escapeAttr(m.title || "")}">
-        <span class="coll-rank">${String(i + 1).padStart(3, "0")}</span>
-        <img alt="${escapeAttr(m.title || "")}" loading="lazy" decoding="async" src="${escapeAttr(m.poster || `posters/${m.id}.webp`)}">
-      </a>`
-        )
+      // Обложка — первые постеры, а не все 40: страница списка должна
+      // открываться быстро даже на телефоне.
+      const covers = list
+        .slice(0, 4)
+        .map((m) => {
+          const { local, fallback } = posterSources(m);
+          return `<img alt="" loading="lazy" decoding="async" src="${escapeAttr(local)}"${
+            fallback ? ` data-fallback="${escapeAttr(fallback)}"` : ""
+          }>`;
+        })
         .join("");
+      const total = c.total && c.total > list.length ? ` из ${c.total}` : "";
+      const source = c.source === "letterboxd" ? " · LETTERBOXD" : "";
       return `
-    <div class="collection">
-      <div class="section-head"><div class="section-title">${escapeHtml((c.title || "").toUpperCase())}</div><div class="section-meta">${escapeHtml(meta)}</div></div>
-      <div class="coll-row">${cards}</div>
-    </div>`;
+    <a class="coll-tile anim" href="#collections/${encodeURIComponent(c.id)}" title="${escapeAttr(c.title || "")}">
+      <div class="coll-cover coll-cover-${Math.min(4, list.length)}">
+        ${covers}
+        <span class="coll-cover-count">${list.length}</span>
+      </div>
+      <div class="coll-tile-title">${escapeHtml(c.title || "Подборка")}</div>
+      <div class="coll-tile-meta">${escapeHtml(`${list.length} ${filmsWord(list.length)}${total}${source}`)}</div>
+    </a>`;
     })
     .join("");
   reveal(wrap);
 }
 
+function renderCollectionPage() {
+  const grid = el("collGrid");
+  if (!grid) return;
+  const c = state.collections.find((x) => x.id === state.collId);
+  if (!c) {
+    grid.innerHTML = '<div class="empty">Подборка не найдена.</div>';
+    return;
+  }
+  const heading = el("collTitle");
+  if (heading) heading.textContent = (c.title || "Подборка").toUpperCase();
+  document.title = `${c.title || "Подборка"} — Что посмотреть?`;
+  const list = c.items.map(movieById).filter(Boolean);
+  const meta = el("collMeta");
+  if (meta) {
+    const total = c.total && c.total > list.length ? ` из ${c.total}` : "";
+    const source = c.source === "letterboxd" ? " · LETTERBOXD" : "";
+    meta.textContent = `${list.length} ${filmsWord(list.length)}${total}${source}`;
+  }
+  if (!list.length) {
+    grid.innerHTML = '<div class="empty">Подборка появится после следующего обновления базы.</div>';
+    return;
+  }
+  grid.innerHTML = list.map((m, i) => cardHtml(m, { rank: i + 1 })).join("");
+  reveal(grid);
+}
+
 function showCollectionsPage() {
+  state.collId = null;
   document.body.dataset.view = "collections";
   const page = el("collectionsPage");
   page.innerHTML =
@@ -930,7 +968,7 @@ function showCollectionsPage() {
       <button class="movie-back" id="collBack" title="Назад">← Назад</button>
       <div class="section-head"><div class="section-title">ПОДБОРКИ</div><div class="section-meta">COLLECTIONS</div></div>
     </div>
-    <div class="wrap" id="collectionsList"></div>`;
+    <div class="wrap"><div class="coll-tiles" id="collectionsList"></div></div>`;
   page.hidden = false;
   document.title = "Подборки — Что посмотреть?";
   renderCollectionsPage();
@@ -938,7 +976,26 @@ function showCollectionsPage() {
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
+function showCollectionPage(id) {
+  state.collId = id;
+  document.body.dataset.view = "collection";
+  const page = el("collectionsPage");
+  const c = state.collections.find((x) => x.id === id);
+  const title = (c && c.title ? c.title : "Подборка").toUpperCase();
+  page.innerHTML = `<div class="wrap coll-page-head">
+      <a class="movie-back" id="collBackToList" href="#collections" title="Все подборки">← Все подборки</a>
+      <div class="section-head"><div class="section-title" id="collTitle">${escapeHtml(title)}</div><div class="section-meta" id="collMeta"></div></div>
+    </div>
+    <div class="wrap"><div class="grid" id="collGrid"></div></div>`;
+  page.hidden = false;
+  document.title = `${c && c.title ? c.title : "Подборка"} — Что посмотреть?`;
+  renderCollectionPage();
+  updateNavActive();
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
 function hideCollectionsPage() {
+  state.collId = null;
   document.body.dataset.view = "";
   const page = el("collectionsPage");
   page.hidden = true;
@@ -1394,19 +1451,23 @@ function exitMoviePage() {
 
 function updateNavActive() {
   const h = (location.hash || "#home").replace("#", "");
-  const section = h.startsWith("movie/") ? "" : h || "home";
+  let section = h || "home";
+  if (h.startsWith("movie/")) section = "";
+  // Страница одной подборки (#collections/<id>) подсвечивает пункт «Подборки».
+  else if (h === "collections" || h.startsWith("collections/")) section = "collections";
   document.querySelectorAll(".navlinks a, .tabbar a").forEach((a) => {
     a.classList.toggle("active", a.getAttribute("href") === `#${section}`);
   });
 }
 
-/* Роутер: #movie/{id} — страница фильма, #collections — страница подборок,
-   #секция — прыжок по главной */
+/* Роутер: #movie/{id} — страница фильма, #collections — список подборок,
+   #collections/{id} — одна подборка, #секция — прыжок по главной */
 function route() {
   const id = currentMovieId();
-  const wasMovie = document.body.dataset.view === "movie";
-  const wasColl = document.body.dataset.view === "collections";
-  const wasRails = document.body.dataset.view === "rails";
+  const view = document.body.dataset.view;
+  const wasMovie = view === "movie";
+  const wasColl = view === "collections" || view === "collection";
+  const wasRails = view === "rails";
   const wasAny = wasMovie || wasColl || wasRails;
   if (id !== null) {
     if (!wasAny) state.homeScroll = window.scrollY;
@@ -1415,11 +1476,26 @@ function route() {
     renderMoviePage(id);
     return;
   }
+  // Одна подборка: #collections/<id>. id приходит из адресной строки,
+  // поэтому decodeURIComponent — в try/catch.
+  if (location.hash.startsWith("#collections/")) {
+    let collId = location.hash.slice("#collections/".length);
+    try {
+      collId = decodeURIComponent(collId);
+    } catch {
+      // Битый %-escape — пробуем как есть.
+    }
+    if (!wasAny) state.homeScroll = window.scrollY;
+    if (wasMovie) exitMoviePage();
+    if (wasRails) hideRailsPage();
+    if (view !== "collection" || state.collId !== collId) showCollectionPage(collId);
+    return;
+  }
   if (location.hash === "#collections") {
     if (!wasAny) state.homeScroll = window.scrollY;
     if (wasMovie) exitMoviePage();
     if (wasRails) hideRailsPage();
-    if (!wasColl) showCollectionsPage();
+    if (view !== "collections") showCollectionsPage();
     return;
   }
   if (location.hash === "#trending" || location.hash === "#soon") {
@@ -1557,6 +1633,7 @@ function bindEvents() {
   bindImageFallbacks(el("savedGrid"));
   bindImageFallbacks(el("feature"));
   bindImageFallbacks(el("moviePage"));
+  bindImageFallbacks(el("collectionsPage"));
   bindImageFallbacks(el("nowRow"));
   bindImageFallbacks(el("upRow"));
 
