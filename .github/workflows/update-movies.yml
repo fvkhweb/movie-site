@@ -2,7 +2,11 @@ name: Update movies
 
 on:
   schedule:
+    # Основной прогон. GitHub иногда пропускает или сильно задерживает
+    # scheduled-запуски, поэтому есть страховочный в 11:00 UTC: он сразу
+    # выходит, если данные уже обновлены сегодня.
     - cron: "0 6 * * *"
+    - cron: "0 11 * * *"
   workflow_dispatch:
     inputs:
       audit_limit:
@@ -23,6 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Проверить, обновлялись ли данные сегодня
+        id: fresh
+        run: |
+          last=$(git log -1 --format=%cs -- data/movies.json)
+          today=$(date -u +%F)
+          echo "последнее обновление данных: $last, сегодня: $today"
+          if [ "$last" = "$today" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -37,7 +50,11 @@ jobs:
           key: kp-state-${{ github.run_number }}
           restore-keys: |
             kp-state-
-      - run: python scripts/fetch_movies.py
+      # Ручной запуск всегда полный (нужен для аудита), а страховочный
+      # scheduled-прогон не трогает API, если ночной уже всё обновил.
+      - name: Импорт новинок
+        if: github.event_name != 'schedule' || steps.fresh.outputs.skip != 'true'
+        run: python scripts/fetch_movies.py
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           POISKKINO_API_KEY: ${{ secrets.POISKKINO_API_KEY }}
