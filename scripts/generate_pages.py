@@ -34,6 +34,11 @@ STYLE = """
     .ratings span{border:1px solid #384252;border-radius:6px;padding:5px 9px}
     .desc{color:#a2adbb;font-size:14px}
     .cta{display:inline-block;margin-top:22px;padding:12px 18px;border-radius:8px;background:#2f6bff;color:#fff;text-decoration:none;font-weight:800}
+    .similar{margin-top:30px}
+    .similar h2{font-size:15px;margin:0 0 10px}
+    .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
+    .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .similar a:hover{border-color:#2f6bff;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 """
@@ -58,7 +63,7 @@ def poster_url(movie):
     return f"{BASE}/{poster.lstrip('/')}"
 
 
-def render(movie, genre_names):
+def render(movie, genre_names, movies_by_id):
     mid = movie["id"]
     title = movie.get("title") or "Без названия"
     year = movie.get("year") or ""
@@ -99,14 +104,14 @@ def render(movie, genre_names):
     if genre_list:
         schema["genre"] = genre_list
     if director:
-        schema["director"] = {"@type": "Person", "name": director}
-    if movie.get("rating"):
-        schema["aggregateRating"] = {
-            "@type": "AggregateRating",
-            "ratingValue": movie["rating"],
-            "bestRating": 10,
-            "worstRating": 0,
-        }
+        # У фильма может быть несколько режиссёров — schema.org ждёт массив Person.
+        schema["director"] = [
+            {"@type": "Person", "name": name.strip()}
+            for name in director.split(",")
+            if name.strip()
+        ]
+    # aggregateRating без ratingCount Google помечает как неполный,
+    # поэтому рейтинг в разметку не отдаём: карточку и так видно на странице.
     schema_json = json.dumps(schema, ensure_ascii=False).replace("</", "<\\/")
 
     title_year = f"{title} ({year})" if year else title
@@ -116,6 +121,21 @@ def render(movie, genre_names):
     ratings_block = f'<div class="ratings">{ratings_html}</div>' if ratings else ""
     meta_block = f'<p class="meta">{text(meta_line)}</p>' if meta_line else ""
 
+    # Внутренние ссылки на похожие фильмы: поисковики обходят статичные
+    # страницы не только по sitemap, но и по ссылкам между ними.
+    similar_items = [
+        movies_by_id[sid]
+        for sid in (movie.get("similar") or [])
+        if sid != mid and sid in movies_by_id
+    ][:6]
+    similar_block = ""
+    if similar_items:
+        links = "".join(
+            f'<li><a href="../{m["id"]}/">{text(m.get("title") or "Фильм")}</a></li>'
+            for m in similar_items
+        )
+        similar_block = f'<section class="similar"><h2>Похожие фильмы</h2><ul>{links}</ul></section>'
+
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -123,6 +143,7 @@ def render(movie, genre_names):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; base-uri 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="max-image-preview:large">
   <title>{text(title_year)} — Что посмотреть?</title>
   <meta name="description" content="{text(meta_description)}">
   <link rel="canonical" href="{text(url)}">
@@ -149,6 +170,7 @@ def render(movie, genre_names):
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
+    {similar_block}
   </main>
 </body>
 </html>
@@ -171,13 +193,17 @@ def main():
     genre_names = {g["id"]: g["name"] for g in genres if isinstance(g, dict)}
 
     os.makedirs(FILM_DIR, exist_ok=True)
+    movies_by_id = {m["id"]: m for m in movies if isinstance(m.get("id"), int)}
     ids = set()
     for movie in movies:
         mid = movie.get("id")
         if not isinstance(mid, int):
             continue
         ids.add(mid)
-        write_atomic(os.path.join(FILM_DIR, str(mid), "index.html"), render(movie, genre_names))
+        write_atomic(
+            os.path.join(FILM_DIR, str(mid), "index.html"),
+            render(movie, genre_names, movies_by_id),
+        )
 
     removed = 0
     for name in os.listdir(FILM_DIR):

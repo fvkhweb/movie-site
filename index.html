@@ -6,9 +6,11 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://mc.yandex.ru; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://mc.yandex.ru https://yandex.ru; frame-src https://www.youtube.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="description" content="Каталог фильмов: жанры, годы, рейтинг, актёры, подборки. С постерами и кадрами на русском.">
+  <link rel="canonical" href="https://fvkhweb.github.io/movie-site/">
+  <meta name="robots" content="max-image-preview:large">
   <title>Что посмотреть?</title>
   <meta name="theme-color" content="#090b0f">
-  <link rel="preload" as="fetch" href="data/movies.json?v=8cf475b4" crossorigin>
+  <link rel="preload" as="fetch" href="data/movies.json?v=864b3595" crossorigin>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
@@ -167,7 +169,7 @@
     <a href="#saved" data-tab="saved"><span>♡</span>Избранное</a>
   </nav>
 
-  <script src="app.js?v=f16ee666"></script>
+  <script src="app.js?v=4fbfe350"></script>
   <script>
     if ("serviceWorker" in navigator) {
       addEventListener("load", () => navigator.serviceWorker.register("sw.js"));
