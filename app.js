@@ -1411,7 +1411,6 @@ function moviePageHtml(m) {
         <button class="fav-btn ${isFav ? "active" : ""}" data-id="${m.id}" title="В избранное">${isFav ? "♥ В избранном" : "＋ В избранное"}</button>
         ${m.trailer ? `<button class="primary trailer-btn" data-trailer="${escapeAttr(m.trailer)}">▶ Трейлер</button>` : ""}
         <button class="movie-action share-btn" data-share="${m.id}" title="Скопировать постоянную ссылку на фильм">Поделиться</button>
-        <a class="movie-action movie-permalink" href="film/${m.id}/" title="Постоянная страница фильма — её видят поисковики и мессенджеры">Открыть страницу фильма</a>
       </div>
     </div>
   </div>
