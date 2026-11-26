@@ -1,11 +1,12 @@
 {
-    "versionCode":  5,
-    "versionName":  "1.2.1",
-    "apkUrl":  "https://fvkhweb.github.io/movie-site/app/WhatToWatch-1.2.1.apk",
-    "sha256":  "e013d8b22292102390f188fc8afac5f519b934078913c82c53453d995d6c7fcf",
+    "versionCode":  6,
+    "versionName":  "1.3.0",
+    "apkUrl":  "https://fvkhweb.github.io/movie-site/app/WhatToWatch-1.3.0.apk",
+    "sha256":  "e36b64dbb9c5807a310fe6c1ffa3e6cdf71e660547237dfaf70fd92bdf7e7779",
     "size":  2841785,
     "notes":  [
-                  "Новая иконка со светлым фоном — буква Ч теперь видна"
+                  "Карта серии: части фильма по порядку выхода",
+                  "«Похожее»: случайные новинки больше не занимают все слоты"
               ],
-    "publishedAt":  "2026-11-26T19:03:38Z"
+    "publishedAt":  "2026-11-26T19:25:16Z"
 }
