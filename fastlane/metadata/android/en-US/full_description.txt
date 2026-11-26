@@ -1,0 +1,12 @@
+What to Watch? is a fast, ad-free catalog of movies and TV series.
+
+• Search across the whole catalog, filter by genre and year
+• Curated collections: best of 2025, Korean cinema, thrillers for the evening, 90s classics
+• Movie pages with cast, director, genres, ratings and fun facts
+• Favorites — keep everything you plan to watch
+• The catalog is updated daily and the app starts from a local snapshot, so it opens instantly even offline
+
+No ads, no sign-up, no trackers. Open source under the MIT license.
+
+The app interface is in Russian. Web version: https://fvkhweb.github.io/movie-site/
+Source code: https://github.com/fvkhweb/movie-site
