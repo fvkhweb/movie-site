@@ -1,14 +1,11 @@
 {
-    "versionCode":  4,
-    "versionName":  "1.2.0",
-    "apkUrl":  "https://fvkhweb.github.io/movie-site/app/WhatToWatch-1.2.0.apk",
-    "sha256":  "d4986c487e356d5d173fdc86b87380bf9e568e875df34c77dca8879f0bc2402e",
+    "versionCode":  5,
+    "versionName":  "1.2.1",
+    "apkUrl":  "https://fvkhweb.github.io/movie-site/app/WhatToWatch-1.2.1.apk",
+    "sha256":  "e013d8b22292102390f188fc8afac5f519b934078913c82c53453d995d6c7fcf",
     "size":  2841785,
     "notes":  [
-                  "Каталог прокручивается целиком: шапка с фильтрами больше не фиксирована",
-                  "«На слуху» и «Скоро в кино» открываются полной сеткой",
-                  "Убрана чёрная полоса над нижней панелью",
-                  "Крупнее счётчик фильмов на главной"
+                  "Новая иконка со светлым фоном — буква Ч теперь видна"
               ],
-    "publishedAt":  "2026-11-21T19:46:49Z"
+    "publishedAt":  "2026-11-26T19:03:38Z"
 }
