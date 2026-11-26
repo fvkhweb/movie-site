@@ -1,5 +1,5 @@
 import html as html_mod
-import os, json, time, re, datetime, requests
+import os, json, time, re, datetime, random, requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
@@ -428,6 +428,8 @@ def enrich_movie(m):
             "photo": c.get("profile_path") or "",
         })
 
+    collection = details.get("belongs_to_collection") or {}
+
     return {
         "id": m["id"],
         "title": details.get("title") or m.get("title", ""),
@@ -436,6 +438,11 @@ def enrich_movie(m):
         "release_date": release,
         "director": director,
         "rating": round(details.get("vote_average") or 0, 1),
+        "vote_count": details.get("vote_count") or 0,
+        "series": (
+            {"id": collection.get("id"), "name": collection.get("name") or ""}
+            if collection.get("id") else None
+        ),
         "popularity": round(m.get("_popularity", 0), 1),
         "runtime": details.get("runtime") or 0,
         "genres": [g["id"] for g in details.get("genres", [])],
@@ -1150,39 +1157,73 @@ def prune_list_ids(lists, dropped):
 
 MIN_SIMILAR = 4
 MAX_SIMILAR = 6
+# TMDB отдаёт рейтинг без учёта числа голосов: у свежих релизов он держится
+# на 10.0 при паре оценок и вытесняет из «Похожего» всё остальное. Поэтому
+# в добор пускаем только фильмы с внятным числом голосов, считаем
+# байесовскую оценку и добираем разные фильмы, а не один и тот же топ жанра.
+FALLBACK_MIN_VOTES = 100
+FALLBACK_MIN_RATING = 5.5
+FALLBACK_POOL = 50
+FALLBACK_BAYES_M = 300
+FALLBACK_BAYES_C = 6.2
+
+
+def fallback_score(cand, year):
+    """Оценка для добора: рейтинг с поправкой на число голосов и бонус
+    за близость года. None — фильм слишком плохой или без голосов."""
+    votes = cand.get("vote_count") or 0
+    rating = cand.get("rating") or 0
+    if votes < FALLBACK_MIN_VOTES or rating < FALLBACK_MIN_RATING:
+        return None
+    score = (votes * rating + FALLBACK_BAYES_M * FALLBACK_BAYES_C) / (
+        votes + FALLBACK_BAYES_M
+    )
+    gap = abs((norm_year(cand.get("year")) or 0) - year)
+    return score - min(gap, 20) * 0.04
 
 
 def repair_similar(movies):
-    """Оставляет в «Похожее» только фильмы каталога и, если их меньше
-    четырёх, добирает до шести того же жанра по рейтингу и близости года."""
-    ids = {m["id"] for m in movies}
+    """Оставляет в «Похожее» только фильмы каталога, выкидывает части той же
+    серии и, если рекомендаций меньше четырёх, добирает фильмы того же жанра
+    с учётом числа голосов. Добор детерминированно перемешивается по id
+    фильма: списки не повторяются, но и не меняются между прогонами."""
+    ids = {m["id"]: m for m in movies}
     by_genre = {}
     for movie in movies:
         for genre in movie.get("genres") or []:
             by_genre.setdefault(genre, []).append(movie)
 
     for movie in movies:
+        series_id = (movie.get("series") or {}).get("id")
         similar = []
         for sid in movie.get("similar") or []:
-            if sid in ids and sid != movie["id"] and sid not in similar:
-                similar.append(sid)
+            cand = ids.get(sid)
+            if not cand or sid == movie["id"] or sid in similar:
+                continue
+            if series_id and (cand.get("series") or {}).get("id") == series_id:
+                continue
+            similar.append(sid)
 
         if len(similar) < MIN_SIMILAR:
             year = norm_year(movie.get("year")) or 0
             pool = {}
             for genre in movie.get("genres") or []:
                 for cand in by_genre.get(genre, []):
-                    if cand["id"] != movie["id"] and cand["id"] not in similar:
-                        pool[cand["id"]] = cand
-            candidates = sorted(
-                pool.values(),
-                key=lambda c: (
-                    -(c.get("rating") or 0),
-                    abs((norm_year(c.get("year")) or 0) - year),
-                ),
-            )
-            for cand in candidates[:MAX_SIMILAR - len(similar)]:
-                similar.append(cand["id"])
+                    cid = cand["id"]
+                    if cid == movie["id"] or cid in similar:
+                        continue
+                    if series_id and (cand.get("series") or {}).get("id") == series_id:
+                        continue
+                    score = fallback_score(cand, year)
+                    if score is not None:
+                        pool[cid] = (score, cand)
+            ranked = sorted(pool.values(), key=lambda item: (-item[0], item[1]["id"]))
+            ranked = ranked[:FALLBACK_POOL]
+            need = min(MAX_SIMILAR - len(similar), len(ranked))
+            if need > 0:
+                picks = random.Random(movie["id"]).sample(ranked, need)
+                picks.sort(key=lambda item: (-item[0], item[1]["id"]))
+                similar.extend(cand["id"] for _, cand in picks)
 
         if similar:
             movie["similar"] = similar[:MAX_SIMILAR]
@@ -1716,6 +1757,11 @@ def build_catalog():
             m.pop("description", None)
         if not m.get("description_en"):
             m.pop("description_en", None)
+        if not m.get("vote_count"):
+            m.pop("vote_count", None)
+        series = m.get("series") or {}
+        if not series.get("id") or not (series.get("name") or "").strip():
+            m.pop("series", None)
 
     save("movies", movies)
     save("genres", genres)

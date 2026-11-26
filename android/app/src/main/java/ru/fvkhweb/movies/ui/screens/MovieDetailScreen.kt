@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -103,6 +104,12 @@ fun MovieDetailScreen(
     val cast = state.castOf(movie.id).ifEmpty { movie.cast }
     val similar = remember(movie.similar, state.moviesById) {
         movie.similar.mapNotNull { state.moviesById[it] }.take(10)
+    }
+    val series = remember(movie.series?.id, state.moviesById) {
+        val seriesId = movie.series?.id ?: return@remember emptyList<Movie>()
+        state.moviesById.values
+            .filter { it.series?.id == seriesId }
+            .sortedWith(compareBy({ it.releaseKey.ifBlank { "9999-99-99" } }, { it.id }))
     }
 
     val share: () -> Unit = {
@@ -290,6 +297,33 @@ fun MovieDetailScreen(
             }
         }
 
+        if (series.size > 1) {
+            val seriesName = movie.series?.name?.takeIf { it.isNotBlank() }
+                ?.uppercase(Locale.getDefault()) ?: "ФИЛЬМЫ"
+            item {
+                SectionHead(
+                    "🎬 СЕРИЯ «$seriesName»",
+                    "SERIES",
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    itemsIndexed(series, key = { _, part -> part.id }) { index, part ->
+                        SeriesCard(
+                            movie = part,
+                            number = index + 1,
+                            current = part.id == movie.id,
+                            onClick = { onOpenMovie(part.id) },
+                        )
+                    }
+                }
+            }
+        }
+
         if (cast.isNotEmpty()) {
             item {
                 SectionHead(
@@ -328,6 +362,75 @@ fun MovieDetailScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SeriesCard(
+    movie: Movie,
+    number: Int,
+    current: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        Modifier
+            .width(104.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f / 3f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Panel)
+                .border(
+                    width = if (current) 2.dp else 1.dp,
+                    color = if (current) Blue2 else Line,
+                    shape = RoundedCornerShape(8.dp),
+                ),
+        ) {
+            RemoteImage(
+                urls = Media.posterUrls(movie),
+                contentDescription = movie.title,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(Bg.copy(alpha = 0.82f))
+                    .border(1.dp, Line.copy(alpha = 0.7f), RoundedCornerShape(100.dp))
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    number.toString(),
+                    style = AppText.meta.copy(fontSize = 9.sp),
+                    color = Blue2,
+                )
+            }
+        }
+        Text(
+            movie.title.ifBlank { "Без названия" },
+            style = AppText.chip.copy(fontSize = 10.sp),
+            color = if (current) White else Color(0xFFC6CCD5),
+            maxLines = 2,
+            minLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        movie.year?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = AppText.meta.copy(fontSize = 8.5.sp), color = Muted)
+        }
+        if (current) {
+            Text(
+                "ВЫ ЗДЕСЬ",
+                style = AppText.meta.copy(fontSize = 8.sp),
+                color = Blue2,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
     }
 }

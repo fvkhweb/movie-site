@@ -203,11 +203,11 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 .movie-body{padding:0 34px 30px}
 .overview{color:#a2adbb;font-size:13px;line-height:1.8;margin:0}
 .facts-section{padding:0 34px 26px}
-.facts-section h3,.cast-section h3,.similar-section h3{font:600 13px Unbounded;letter-spacing:-.3px;margin:0 0 14px;color:#cbd2dc}
+.facts-section h3,.cast-section h3,.similar-section h3,.series-section h3{font:600 13px Unbounded;letter-spacing:-.3px;margin:0 0 14px;color:#cbd2dc}
 .facts-section ul{margin:0;padding-left:18px;color:#9ca6b5;font-size:12px;line-height:1.75}
 .facts-section li{margin-bottom:8px}
 .facts-section li::marker{color:var(--blue2)}
-.cast-section,.similar-section{padding:0 34px 30px}
+.cast-section,.similar-section,.series-section{padding:0 34px 30px}
 .cast-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
 .cast-card{flex:none;width:86px;cursor:pointer;text-align:center}
 .cast-card img,.cast-photo-empty{width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid #384252;display:block;margin:0 auto 8px}
@@ -220,6 +220,18 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
 .similar-card img{width:110px;aspect-ratio:2/3;object-fit:cover;border-radius:7px;border:1px solid #ffffff0d;display:block;margin-bottom:7px;background:var(--panel2)}
 .similar-card:hover img{border-color:var(--blue)}
 .similar-card span{font-size:10.5px;font-weight:700;line-height:1.35;display:block;color:#c6ccd5}
+
+/* ── Карта серии: части фильма по порядку выхода ── */
+.series-row{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
+.series-card{position:relative;flex:none;width:110px;display:block;color:inherit;text-decoration:none;cursor:pointer}
+.series-card img{width:110px;aspect-ratio:2/3;object-fit:cover;border-radius:7px;border:1px solid #ffffff0d;display:block;margin-bottom:7px;background:var(--panel2);transition:border-color .2s,transform .35s,filter .35s}
+.series-card:hover img{border-color:var(--blue)}
+.series-num{position:absolute;z-index:2;top:6px;left:6px;min-width:22px;height:22px;padding:0 6px;border-radius:100px;background:rgba(9,11,15,.82);border:1px solid #ffffff2e;display:grid;place-items:center;font:700 10px 'DM Mono',monospace;color:#dce5ff}
+.series-title{font-size:10.5px;font-weight:700;line-height:1.35;display:block;color:#c6ccd5}
+.series-year{font-size:9.5px;display:block;margin-top:2px;color:var(--muted)}
+.series-card.current img{border-color:var(--blue);box-shadow:0 0 0 2px #2f6bff66}
+.series-card.current .series-title{color:#fff}
+.series-here{display:inline-block;margin-top:5px;padding:2px 7px;border-radius:100px;background:#2f6bff22;border:1px solid #2f6bff77;font-size:8.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#9db9ff}
 
 /* ── Адаптив ── */
 @media(max-width:1100px){.filtertoggle{padding:0 13px}}
@@ -257,7 +269,7 @@ footer{border-top:1px solid var(--line);padding:28px 0 40px;color:#737e8d;font-s
   .trailer-wrap{grid-column:1/-1;min-height:200px}
   .movie-info{padding:22px 16px 0}
   .movie-info h2{font-size:18px}
-  .movie-body,.facts-section,.cast-section,.similar-section{padding-left:16px;padding-right:16px}
+  .movie-body,.facts-section,.cast-section,.similar-section,.series-section{padding-left:16px;padding-right:16px}
   .foot{flex-direction:column}
 }
 
@@ -312,8 +324,8 @@ body[data-view="rails"] footer{display:none}
 .movie-page-body{padding-bottom:80px}
 .movie-page-body .overview-block{margin-top:38px;max-width:920px}
 .movie-page-body .overview{font-size:15px;line-height:1.9;color:#b6c0cc}
-.movie-page-body .facts-section,.movie-page-body .cast-section,.movie-page-body .similar-section{padding:36px 0 0}
-.movie-page-body .facts-section h3,.movie-page-body .cast-section h3,.movie-page-body .similar-section h3{font-size:15px;margin-bottom:18px}
+.movie-page-body .facts-section,.movie-page-body .cast-section,.movie-page-body .similar-section,.movie-page-body .series-section{padding:36px 0 0}
+.movie-page-body .facts-section h3,.movie-page-body .cast-section h3,.movie-page-body .similar-section h3,.movie-page-body .series-section h3{font-size:15px;margin-bottom:18px}
 .movie-page-body .facts-section ul{font-size:13px;line-height:1.85;max-width:920px}
 /* Актёры: крупная сетка на всю ширину вместо узкой бегущей строки */
 .movie-page-body .cast-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:22px 14px;overflow:visible;padding-bottom:0}
@@ -327,6 +339,14 @@ body[data-view="rails"] footer{display:none}
 .movie-page-body .similar-card img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:8px;border:1px solid #ffffff0d;display:block;margin-bottom:8px;background:var(--panel2);transition:transform .35s,filter .35s}
 .movie-page-body .similar-card:hover img{transform:scale(1.04);filter:brightness(.85)}
 .movie-page-body .similar-card span{font-size:12px;font-weight:800;line-height:1.4;display:block;color:#d3d9e2}
+/* Карта серии: та же сетка, что у «Похожего», с номером части и подсветкой */
+.movie-page-body .series-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:20px 14px;overflow:visible;padding-bottom:0}
+.movie-page-body .series-card{width:auto}
+.movie-page-body .series-card img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:8px;border:1px solid #ffffff0d;display:block;margin-bottom:8px;background:var(--panel2);transition:transform .35s,filter .35s}
+.movie-page-body .series-card:hover img{transform:scale(1.04);filter:brightness(.85)}
+.movie-page-body .series-title{font-size:12px;font-weight:800;line-height:1.4;color:#d3d9e2}
+.movie-page-body .series-year{font-size:10.5px}
+.movie-page-body .series-here{font-size:9px}
 
 /* ── Страница подборок (#collections) ── */
 .coll-page-head{padding:34px 0 6px}

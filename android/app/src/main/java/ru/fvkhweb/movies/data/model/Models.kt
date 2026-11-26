@@ -20,6 +20,7 @@ data class Movie(
     val description: String? = null,
     @SerialName("description_en") val descriptionEn: String? = null,
     val similar: List<Long> = emptyList(),
+    val series: MovieSeries? = null,
     val trailer: String? = null,
     @SerialName("kp_rating") val kpRating: Double? = null,
     val frame: String? = null,
@@ -76,6 +77,12 @@ data class Movie(
         }
     }
 }
+
+@Serializable
+data class MovieSeries(
+    val id: Int = 0,
+    val name: String = "",
+)
 
 @Serializable
 data class Genre(

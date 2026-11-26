@@ -200,6 +200,20 @@ function movieById(id) {
   return moviesByIdCache.get(id);
 }
 
+/* Части серии (коллекция TMDB), которые есть в каталоге. Порядок — по дате
+   выхода: так серия читается как навигационная карта, а не как залежи. */
+function seriesParts(movie) {
+  const seriesId = movie && movie.series && movie.series.id;
+  if (!seriesId) return [];
+  return state.movies
+    .filter((m) => m.series && m.series.id === seriesId)
+    .sort((a, b) => {
+      const da = a.release_date || (a.year ? `${a.year}-01-01` : "9999-99-99");
+      const db = b.release_date || (b.year ? `${b.year}-01-01` : "9999-99-99");
+      return da.localeCompare(db) || a.id - b.id;
+    });
+}
+
 function normalizeSearch(value) {
   return String(value ?? "").toLowerCase().replaceAll("ё", "е").trim();
 }
@@ -1382,6 +1396,23 @@ function moviePageHtml(m) {
         .join("")}</div></div>`
     : "";
 
+  const series = seriesParts(m);
+  const seriesHtml =
+    series.length > 1
+      ? `<div class="series-section"><h3>🎬 Серия «${escapeHtml((m.series && m.series.name) || "Фильмы")}»</h3><div class="series-row">${series
+          .map(
+            (s, i) => `
+      <a class="series-card${s.id === m.id ? " current" : ""}" href="#movie/${s.id}" data-id="${s.id}"${s.id === m.id ? ' aria-current="page"' : ""}>
+        <span class="series-num">${i + 1}</span>
+        <img alt="${escapeAttr(s.title || "")}" loading="lazy" src="${escapeAttr(s.poster || `posters/${s.id}.webp`)}">
+        <span class="series-title">${escapeHtml(s.title || "")}</span>
+        <span class="series-year">${escapeHtml(s.year || "")}</span>
+        ${s.id === m.id ? '<span class="series-here">вы здесь</span>' : ""}
+      </a>`
+          )
+          .join("")}</div></div>`
+      : "";
+
   // Плашка премьеры — только у ещё не вышедших фильмов;
   // у вышедших дата ни к чему (она есть в описании и фактах)
   const premiere = isUnreleased(m)
@@ -1417,6 +1448,7 @@ function moviePageHtml(m) {
   <div class="wrap movie-page-body">
     <div class="overview-block"><p class="overview">${escapeHtml(movieDescription(m) || "Описание отсутствует.")}</p></div>
     ${factsHtml}
+    ${seriesHtml}
     ${castHtml}
     ${similarHtml}
   </div>`;

@@ -39,6 +39,14 @@ STYLE = """
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 """
@@ -63,7 +71,7 @@ def poster_url(movie):
     return f"{BASE}/{poster.lstrip('/')}"
 
 
-def render(movie, genre_names, movies_by_id):
+def render(movie, genre_names, movies_by_id, series_items):
     mid = movie["id"]
     title = movie.get("title") or "Без названия"
     year = movie.get("year") or ""
@@ -136,6 +144,23 @@ def render(movie, genre_names, movies_by_id):
         )
         similar_block = f'<section class="similar"><h2>Похожие фильмы</h2><ul>{links}</ul></section>'
 
+    # Части той же серии, которые есть в каталоге, — по порядку выхода.
+    series_block = ""
+    if len(series_items) > 1:
+        series_name = (movie.get("series") or {}).get("name") or "Серия"
+        series_links = []
+        for part in series_items:
+            part_title = text(part.get("title") or "Фильм")
+            part_year = f" ({text(part['year'])})" if part.get("year") else ""
+            current = ' class="current"' if part["id"] == mid else ""
+            series_links.append(
+                f'<li><a{current} href="../{part["id"]}/">{part_title}{part_year}</a></li>'
+            )
+        series_block = (
+            f'<section class="series"><h2>Серия «{text(series_name)}»</h2>'
+            f'<ol>{"".join(series_links)}</ol></section>'
+        )
+
     return f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -170,6 +195,7 @@ def render(movie, genre_names, movies_by_id):
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
+    {series_block}
     {similar_block}
   </main>
 </body>
@@ -194,6 +220,21 @@ def main():
 
     os.makedirs(FILM_DIR, exist_ok=True)
     movies_by_id = {m["id"]: m for m in movies if isinstance(m.get("id"), int)}
+    series_groups = {}
+    for movie in movies_by_id.values():
+        series_id = (movie.get("series") or {}).get("id")
+        if series_id:
+            series_groups.setdefault(series_id, []).append(movie)
+    series_by_movie = {}
+    for group in series_groups.values():
+        if len(group) < 2:
+            continue
+        group.sort(key=lambda m: (
+            m.get("release_date") or (f"{m['year']}-01-01" if m.get("year") else "9999-99-99"),
+            m["id"],
+        ))
+        for movie in group:
+            series_by_movie[movie["id"]] = group
     ids = set()
     for movie in movies:
         mid = movie.get("id")
@@ -202,7 +243,7 @@ def main():
         ids.add(mid)
         write_atomic(
             os.path.join(FILM_DIR, str(mid), "index.html"),
-            render(movie, genre_names, movies_by_id),
+            render(movie, genre_names, movies_by_id, series_by_movie.get(mid, [])),
         )
 
     removed = 0

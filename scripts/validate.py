@@ -126,6 +126,23 @@ def check_movie(movie, ids, current_year):
             if len(similar) > 10:
                 warn(f"{mid}: в similar {len(similar)} фильмов (многовато)")
 
+    vote_count = movie.get("vote_count")
+    if vote_count is not None and (
+        not isinstance(vote_count, int) or isinstance(vote_count, bool) or vote_count < 0
+    ):
+        error(f"{mid}: vote_count={vote_count!r}")
+
+    series = movie.get("series")
+    if series is not None:
+        if not isinstance(series, dict):
+            error(f"{mid}: series должен быть объектом")
+        else:
+            sid = series.get("id")
+            if not isinstance(sid, int) or isinstance(sid, bool):
+                error(f"{mid}: series.id должен быть числом")
+            if not isinstance(series.get("name"), str) or not series.get("name").strip():
+                error(f"{mid}: series.name пустой")
+
     poster = movie.get("poster")
     if not isinstance(poster, str) or not poster:
         error(f"{mid}: пустой poster")
