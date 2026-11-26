@@ -11,7 +11,7 @@ let PAGE_SIZE = pageSize();
 const PROXY_IMG = "https://wsrv.nl/?url=";
 const PROXY_IMG_2 = "https://images.weserv.nl/?url=";
 const FILM_BASE = "https://fvkhweb.github.io/movie-site";
-const DATA_VERSION = "eb7cf588"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
+const DATA_VERSION = "dc6f3908"; // bump при изменении формата данных — сбрасывает кэш файлов data/*
 
 // Битое или старое значение в localStorage не должно ронять весь сайт
 function saveFavorites(ids) {
