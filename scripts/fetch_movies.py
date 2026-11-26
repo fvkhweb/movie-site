@@ -1202,6 +1202,11 @@ def repair_similar(movies):
                 continue
             if series_id and (cand.get("series") or {}).get("id") == series_id:
                 continue
+            # Старые списки могли набраться мусора от прежнего добора:
+            # фильм без внятного числа голосов в «Похожее» не пускаем.
+            votes = cand.get("vote_count")
+            if votes is not None and votes < FALLBACK_MIN_VOTES:
+                continue
             similar.append(sid)
 
         if len(similar) < MIN_SIMILAR:
@@ -1757,10 +1762,9 @@ def build_catalog():
             m.pop("description", None)
         if not m.get("description_en"):
             m.pop("description_en", None)
-        if not m.get("vote_count"):
-            m.pop("vote_count", None)
-        series = m.get("series") or {}
-        if not series.get("id") or not (series.get("name") or "").strip():
+        if not (m.get("series") or {}).get("id") or not (
+            (m.get("series") or {}).get("name") or ""
+        ).strip():
             m.pop("series", None)
 
     save("movies", movies)
