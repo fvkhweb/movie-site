@@ -28,7 +28,10 @@ val releaseRequested = gradle.startParameter.taskNames.any {
         it.contains("bundle", ignoreCase = true) ||
         it.contains("rustore", ignoreCase = true)
 }
-if (releaseKeyFile == null && releaseRequested) {
+// Сборка без ключа допустима только для F-Droid: там APK подписывает сам
+// репозиторий, а keystore.properties в публичный репозиторий не попадает.
+val flossBuild = providers.gradleProperty("floss").isPresent || System.getenv("FDROID") != null
+if (releaseKeyFile == null && releaseRequested && !flossBuild) {
     throw GradleException(
         "keystore.properties не найден или storeFile не существует. " +
             "Release-сборка без ключа подписи запрещена."
