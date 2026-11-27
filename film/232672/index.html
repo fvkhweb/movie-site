@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -49,13 +57,14 @@
       <div>
         <h1>Смешанные <span class="year">2014</span></h1>
         <p class="meta">Blended · Фрэнк Корачи · комедия, мелодрама</p>
-        <div class="ratings"><span>TMDB ★ 6.5</span><span>117 мин</span></div>
+        <div class="ratings"><span>TMDB ★ 6.5</span><span>Кинопоиск ★ 6.8</span><span>117 мин</span></div>
         <p class="desc">После катастрофического свидания «вслепую»  родители-одиночки Лорен и Джим согласны только в одном: они не хотят больше видеть друг друга никогда! Полагая, что их знакомство окончено, обе семьи пользуются удобным случаем и отправляются в идеальный отпуск с детьми. А оказываются в одних и тех же гостиничных апартаментах на роскошном южноафриканском курорте аж на целую неделю.</p>
         <a class="cta" href="../../#movie/232672">Открыть в каталоге</a>
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
-    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../1241052/">Мышь</a></li><li><a href="../1458249/">Unbearable Christmas</a></li><li><a href="../1548369/">Неандертальцы</a></li><li><a href="../1632181/">Socias por accidente</a></li><li><a href="../1461490/">Hershey</a></li><li><a href="../1743695/">El Club del Pie Izquierdo</a></li></ul></section>
+    
+    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../1241052/">Мышь</a></li><li><a href="../1632181/">Socias por accidente</a></li><li><a href="../1461490/">Hershey</a></li><li><a href="../1743695/">El Club del Pie Izquierdo</a></li></ul></section>
   </main>
 </body>
 </html>

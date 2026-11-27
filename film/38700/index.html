@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -49,13 +57,14 @@
       <div>
         <h1>Плохие парни навсегда <span class="year">2020</span></h1>
         <p class="meta">Bad Boys for Life · Билал Фалла, Адиль Эль Арби · триллер, боевик, криминал</p>
-        <div class="ratings"><span>TMDB ★ 6.5</span><span>Кинопоиск ★ 6.7</span><span>113 мин</span></div>
+        <div class="ratings"><span>TMDB ★ 7.1</span><span>Кинопоиск ★ 6.7</span><span>113 мин</span></div>
         <p class="desc">Детективы Майк Лоури и Маркус Бёрнетт снова в деле! Правда, их отстраняют от всех операций, но разве отчаянных друзей когда-нибудь что-либо останавливало? Ведь на этот раз на Майка открывает охоту некто из его прошлой жизни. Так что парням придется отжечь по полной!</p>
         <a class="cta" href="../../#movie/38700">Открыть в каталоге</a>
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
-    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../8961/">Плохие парни 2</a></li><li><a href="../9737/">Плохие парни</a></li><li><a href="../111/">Лицо со шрамом</a></li><li><a href="../573435/">Плохие парни до конца</a></li></ul></section>
+    <section class="series"><h2>Серия «Плохие парни (Коллекция)»</h2><ol><li><a href="../9737/">Плохие парни (1995)</a></li><li><a class="current" href="../38700/">Плохие парни навсегда (2020)</a></li><li><a href="../573435/">Плохие парни до конца (2024)</a></li></ol></section>
+    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../8961/">Плохие парни 2</a></li><li><a href="../82/">Полиция Майами: Отдел нравов</a></li><li><a href="../111/">Лицо со шрамом</a></li><li><a href="../13387/">Перевозчик 3</a></li></ul></section>
   </main>
 </body>
 </html>

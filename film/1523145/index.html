@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -49,13 +57,14 @@
       <div>
         <h1>Твоё сердце будет разбито <span class="year">2026</span></h1>
         <p class="meta">Твоё сердце будет разбито · Михаил Вайнберг · мелодрама</p>
-        <div class="ratings"><span>TMDB ★ 7.8</span><span>Кинопоиск ★ 7.4</span><span>134 мин</span></div>
+        <div class="ratings"><span>TMDB ★ 7.9</span><span>Кинопоиск ★ 7.4</span><span>134 мин</span></div>
         <p class="desc">Старшеклассница Полина спасается от травли в новой школе и идёт на сделку с главным хулиганом Барсом: он должен притворяться её парнем и защищать, а она делать всё, что он скажет. В ходе этой игры у пары появляются настоящие чувства, но у её семьи и одноклассников есть причины разлучить влюблённых.</p>
         <a class="cta" href="../../#movie/1523145">Открыть в каталоге</a>
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
-    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../1461490/">Hershey</a></li><li><a href="../1632181/">Socias por accidente</a></li><li><a href="../1697911/">Drummer Boy</a></li><li><a href="../1232449/">Юные сердца</a></li><li><a href="../1630423/">Моя любимая убийца</a></li><li><a href="../1218925/">Человек-бензопила. Фильм: История Резе</a></li></ul></section>
+    
+    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../313369/">Ла-Ла Ленд</a></li><li><a href="../296096/">До встречи с тобой</a></li><li><a href="../666277/">Прошлые жизни</a></li><li><a href="../792307/">Бедные-несчастные</a></li><li><a href="../122906/">Бойфренд из будущего</a></li><li><a href="../92321/">В лес, где мерцают светлячки</a></li></ul></section>
   </main>
 </body>
 </html>

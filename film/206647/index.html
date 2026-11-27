@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -55,7 +63,8 @@
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
-    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../2501/">Идентификация Борна</a></li><li><a href="../177677/">Миссия невыполнима: Племя изгоев</a></li><li><a href="../370172/">007: Не время умирать</a></li><li><a href="../954/">Миссия невыполнима</a></li></ul></section>
+    <section class="series"><h2>Серия «Джеймс Бонд (Коллекция)»</h2><ol><li><a href="../646/">007: Доктор Ноу (1962)</a></li><li><a href="../36557/">007: Казино Рояль (2006)</a></li><li><a href="../37724/">007: Координаты «Скайфолл» (2012)</a></li><li><a class="current" href="../206647/">007: Спектр (2015)</a></li><li><a href="../370172/">007: Не время умирать (2021)</a></li></ol></section>
+    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../2501/">Идентификация Борна</a></li><li><a href="../177677/">Миссия невыполнима: Племя изгоев</a></li><li><a href="../954/">Миссия невыполнима</a></li><li><a href="../205596/">Игра в имитацию</a></li><li><a href="../14160/">Вверх</a></li><li><a href="../286217/">Марсианин</a></li></ul></section>
   </main>
 </body>
 </html>

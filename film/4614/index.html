@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -49,12 +57,13 @@
       <div>
         <h1>Цена страха <span class="year">2002</span></h1>
         <p class="meta">The Sum of All Fears · Phil Alden Robinson · триллер, боевик, драма</p>
-        <div class="ratings"><span>TMDB ★ 6.5</span><span>124 мин</span></div>
+        <div class="ratings"><span>TMDB ★ 6.5</span><span>Кинопоиск ★ 6.1</span><span>124 мин</span></div>
         <p class="desc">В 2002 Году сирийский крестьянин находит на Голанских высотах атомную бомбу, утерянную израильскими ВВС в ходе войны Судного дня в 1973 году, и продает якобы просто бомбу торговцу оружием Олсону за 400 долларов. Олсон перепродаёт бомбу австрийскому неофашисту Дресслеру. Тем временем, президент России Зоркин умирает от инфаркта. Новым президентом стал Александр Немеров, считающийся в Вашингтоне сторонником жёсткой политики. Обеспокоенный этим обстоятельством, президент США Роберт Фаулер отправляет в Россию для проверки исполнения программы по утилизации ядерного оружия самого директора ЦРУ вместе с аналитиком Джеком Райаном.</p>
         <a class="cta" href="../../#movie/4614">Открыть в каталоге</a>
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
+    
     <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../9331/">Прямая и явная угроза</a></li><li><a href="../1087891/">Новичок</a></li><li><a href="../522241/">Игры шпионов</a></li><li><a href="../1669/">Охота за «Красным Октябрем»</a></li></ul></section>
   </main>
 </body>

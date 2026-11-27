@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -55,7 +63,8 @@
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
-    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../1035259/">Голый пистолет</a></li><li><a href="../10440/">Загадочное убийство в Манхэттэне</a></li><li><a href="../1241052/">Мышь</a></li><li><a href="../1299329/">Джозефина</a></li><li><a href="../1458249/">Unbearable Christmas</a></li><li><a href="../1548369/">Неандертальцы</a></li></ul></section>
+    <section class="series"><h2>Серия «Достать ножи (Коллекция)»</h2><ol><li><a href="../546554/">Достать ножи (2019)</a></li><li><a class="current" href="../661374/">Достать ножи: Стеклянная луковица (2022)</a></li><li><a href="../812583/">Достать ножи: Воскрешение покойника (2025)</a></li></ol></section>
+    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../744653/">Клуб убийств по четвергам</a></li><li><a href="../1035259/">Голый пистолет</a></li><li><a href="../10440/">Загадочное убийство в Манхэттэне</a></li><li><a href="../1419406/">Охота за тенью</a></li><li><a href="../449176/">С любовью, Саймон</a></li><li><a href="../106646/">Волк с Уолл-стрит</a></li></ul></section>
   </main>
 </body>
 </html>

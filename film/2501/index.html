@@ -37,6 +37,14 @@
     .similar ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px}
     .similar a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
     .similar a:hover{border-color:#2f6bff;color:#fff}
+    .series{margin-top:30px}
+    .series h2{font-size:15px;margin:0 0 10px}
+    .series ol{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:8px;counter-reset:part}
+    .series li{counter-increment:part}
+    .series a{display:inline-block;border:1px solid #384252;border-radius:6px;padding:6px 10px;color:#c6d0de;text-decoration:none;font-size:12px}
+    .series a:before{content:counter(part) ". ";color:#7fa0ff;font-weight:700}
+    .series a:hover{border-color:#2f6bff;color:#fff}
+    .series a.current{border-color:#2f6bff;background:#2f6bff1a;color:#fff}
     .note{margin-top:26px;color:#6f7783;font-size:11px}
     @media(max-width:640px){article{grid-template-columns:120px 1fr;gap:16px}main{padding-top:20px}}
 </style>
@@ -56,7 +64,8 @@
         <p class="note">Данные и постеры принадлежат их правообладателям. Этот продукт использует TMDB API, но не одобрен и не сертифицирован TMDB.</p>
       </div>
     </article>
-    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../2503/">Ультиматум Борна</a></li><li><a href="../2502/">Превосходство Борна</a></li><li><a href="../206647/">007: Спектр</a></li><li><a href="../1570467/">Frequency of Fear</a></li><li><a href="../1560520/">Бэтмен: Падение рыцаря. Часть первая</a></li><li><a href="../1562642/">Призрачный солдат</a></li></ul></section>
+    <section class="series"><h2>Серия «Джейсон Борн (Коллекция)»</h2><ol><li><a class="current" href="../2501/">Идентификация Борна (2002)</a></li><li><a href="../2503/">Ультиматум Борна (2007)</a></li></ol></section>
+    <section class="similar"><h2>Похожие фильмы</h2><ul><li><a href="../2502/">Превосходство Борна</a></li><li><a href="../206647/">007: Спектр</a></li><li><a href="../670/">Олдбой</a></li><li><a href="../27205/">Начало</a></li><li><a href="../629/">Подозрительные лица</a></li><li><a href="../146233/">Пленницы</a></li></ul></section>
   </main>
 </body>
 </html>
